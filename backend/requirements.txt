@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic
+pydantic-settings
+google-generativeai
+google-cloud-aiplatform
+python-dotenv
+httpx
+beautifulsoup4
+pandas

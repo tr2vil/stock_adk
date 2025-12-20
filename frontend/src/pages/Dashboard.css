@@ -1,0 +1,13 @@
+.dashboard-container {
+    padding-bottom: 2rem;
+}
+
+.grafana-card {
+    min-height: 50vh;
+    border-style: dashed !important;
+    border-width: 2px !important;
+}
+
+.indicator-badge {
+    font-weight: 700;
+}

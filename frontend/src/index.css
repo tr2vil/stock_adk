@@ -1,0 +1,16 @@
+:root {
+    --bs-primary: #0d6efd;
+    --bs-dark: #212529;
+}
+
+body {
+    margin: 0;
+    display: flex;
+    place-items: center;
+    min-width: 320px;
+    min-height: 100vh;
+}
+
+#root {
+    width: 100%;
+}

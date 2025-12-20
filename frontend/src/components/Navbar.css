@@ -1,0 +1,18 @@
+.navbar-brand {
+    letter-spacing: -0.5px;
+}
+
+.navbar .nav-link {
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    margin: 0 4px;
+}
+
+.navbar .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.navbar .nav-link.active {
+    background-color: var(--bs-primary);
+    color: white !important;
+}

@@ -1,0 +1,157 @@
+.chatContainer {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 56px - 4rem);
+    background-color: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    margin-top: 1rem;
+}
+
+.chatHeader {
+    padding: 1rem 1.5rem;
+    background-color: #212529;
+    color: white;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.messageList {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    background-color: #f8f9fa;
+}
+
+.messageWrapper {
+    display: flex;
+    gap: 0.75rem;
+    max-width: 85%;
+}
+
+.userRow {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+}
+
+.assistantRow {
+    align-self: flex-start;
+}
+
+.avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #0d6efd;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.userRow .avatar {
+    background-color: #6c757d;
+}
+
+.textBubble {
+    padding: 0.75rem 1rem;
+    border-radius: 18px;
+    background-color: white;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.userRow .textBubble {
+    background-color: #0d6efd;
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.assistantRow .textBubble {
+    border-bottom-left-radius: 4px;
+}
+
+.loadingBubble {
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.spinner {
+    animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.inputArea {
+    padding: 1.25rem 1.5rem;
+    background-color: white;
+    border-top: 1px solid #dee2e6;
+    display: flex;
+}
+
+/* News Card (A2UI Style) */
+.newsCard {
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    width: 100%;
+}
+
+.cardHeader {
+    padding: 0.75rem 1rem;
+    background-color: #f1f8ff;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+}
+
+.cardBody {
+    padding: 1.25rem;
+}
+
+.summary {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    font-weight: 500;
+    color: #333;
+}
+
+.importantNews {
+    background-color: #fff9db;
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.importantNews h6 {
+    margin-bottom: 1rem;
+    color: #f08c00;
+}
+
+.newsItem {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.newsItem:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
