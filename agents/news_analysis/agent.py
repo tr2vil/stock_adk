@@ -17,8 +17,6 @@ class NewsAnalysisAgent:
 
     async def fetch_news(self, stock_name: str) -> List[Dict]:
         """네이버 뉴스 검색을 통해 지정된 종목의 최근 뉴스를 수집합니다."""
-        # 실제 환경에서는 더 정교한 뉴스 API나 라이브러리를 사용하지만,
-        # 데모를 위해 네이버 뉴스 검색결과를 스크래핑하는 예시입니다.
         import urllib.parse
         encoded_query = urllib.parse.quote(stock_name + " 주식")
         # Use mobile version which is often easier to scrape
@@ -32,7 +30,7 @@ class NewsAnalysisAgent:
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             print(f"Requesting URL: {url}")
-            response = await client.get(url, headers=headers)
+            response = await client.get(url, headers=headers, timeout=15.0)
             print(f"Response status: {response.status_code}, Length: {len(response.text)}")
             if response.status_code != 200:
                 return []
@@ -40,31 +38,77 @@ class NewsAnalysisAgent:
             soup = BeautifulSoup(response.text, 'html.parser')
             news_items = []
 
-            # 1. Try common containers
-            containers = soup.select(".news_item") or soup.select("li.bx") or soup.select(".bx")
-            if containers:
-                for i, item in enumerate(containers):
-                    if any(ad in str(item) for ad in ['ad_head', 'sp_ad']): continue
+            # Strategy 1: Try multiple selector patterns
+            selector_patterns = [
+                ".news_item",
+                "li.bx",
+                ".bx",
+                "div.news_wrap",
+                "div.news_area",
+                "li.news",
+                "div[class*='news']",
+                "li[class*='news']"
+            ]
 
-                    # Search for any link with reasonable length
-                    links = item.find_all("a")
-                    for a in links:
-                        text = a.get_text(strip=True)
-                        href = a.get('href', '')
-                        if len(text) > 15 and href.startswith('http'):
+            containers = []
+            for pattern in selector_patterns:
+                containers = soup.select(pattern)
+                if containers:
+                    print(f"Found {len(containers)} items with selector: {pattern}")
+                    break
+
+            # Strategy 2: If no containers found, try finding all links
+            if not containers:
+                print("No containers found, trying to find all article links...")
+                all_links = soup.find_all("a", href=True)
+                for a in all_links:
+                    text = a.get_text(strip=True)
+                    href = a.get('href', '')
+                    # Filter for news-like links
+                    if (len(text) > 15 and
+                        href.startswith('http') and
+                        any(keyword in text for keyword in [stock_name, '주식', '증권', '투자'])):
+                        news_items.append({
+                            "title": text,
+                            "link": href,
+                            "description": text[:100]
+                        })
+                        print(f"Extracted (direct): {text[:30]}...")
+                        if len(news_items) >= 10:
+                            break
+            else:
+                # Strategy 3: Extract from containers
+                for i, item in enumerate(containers):
+                    # Skip ads
+                    if any(ad in str(item) for ad in ['ad_head', 'sp_ad', 'ad_area']):
+                        continue
+
+                    # Try to find title and link
+                    link_elem = item.find("a", href=True)
+                    if link_elem:
+                        text = link_elem.get_text(strip=True)
+                        href = link_elem.get('href', '')
+
+                        # More lenient filtering
+                        if len(text) > 10 and href.startswith('http'):
                             news_items.append({
                                 "title": text,
                                 "link": href,
                                 "description": item.get_text(strip=True)[:100]
                             })
-                            print(f"Extracted: {text[:20]}...")
-                            break
-                    if len(news_items) >= 10: break
+                            print(f"Extracted: {text[:30]}...")
 
-            # 2. LLM Fallback: If still nothing, let Gemini try to parse
+                    if len(news_items) >= 10:
+                        break
+
+            # Strategy 4: LLM Fallback if still nothing
             if not news_items:
                 print("Manual scraping failed. Attempting LLM fallback...")
-                llm_prompt = f"다음 HTML에서 주요 뉴스 제목과 링크를 5개만 추출해 JSON 배열로 응답해줘. [{{'title': '...', 'link': '...', 'description': '...'}}, ...]\n\nHTML:\n{response.text[:15000]}"
+                llm_prompt = f"""다음 HTML에서 '{stock_name}' 관련 뉴스 제목과 링크를 5개만 추출해 JSON 배열로 응답해줘.
+각 항목은 {{'title': '...', 'link': '...', 'description': '...'}} 형식이어야 해.
+
+HTML:
+{response.text[:15000]}"""
                 try:
                     llm_res = self.model.generate_content(llm_prompt)
                     res_text = llm_res.text
@@ -79,7 +123,7 @@ class NewsAnalysisAgent:
                 except Exception as e:
                     print(f"LLM Fallback Error: {e}")
 
-        print(f"Total news_items: {len(news_items)}")
+        print(f"Total news_items collected: {len(news_items)}")
         return news_items
 
     async def analyze_and_summarize(self, stock_name: str, news_list: List[Dict]) -> Dict:
