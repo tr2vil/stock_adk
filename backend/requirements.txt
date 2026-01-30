@@ -4,6 +4,7 @@ sqlalchemy
 psycopg2-binary
 pydantic
 pydantic-settings
+google-adk[a2a]
 google-generativeai
 google-cloud-aiplatform
 python-dotenv

@@ -207,3 +207,4 @@ marimo/_lsp/
 # Docker
 docker/postgres/data/
 docker/grafana/data/
+.claude/
