@@ -173,6 +173,100 @@ location /agents/<agent_name>/ {
 | `NEWS_AGENT_MODEL` | 뉴스 에이전트 모델 | gemini-2.5-flash |
 | `BALANCE_SHEET_AGENT_MODEL` | 재무제표 에이전트 모델 | gemini-2.5-flash |
 
+## A2A 서버 기동 및 질의
+
+### 서버 기동
+
+각 에이전트를 별도 터미널에서 실행 (프로젝트 루트에서, venv 활성화 상태):
+
+```bash
+python -m agents.news_analysis.a2a_server      # :8001
+python -m agents.balance_sheet.a2a_server       # :8002
+```
+
+### Agent Card 확인
+
+```bash
+curl http://localhost:8001/.well-known/agent.json
+curl http://localhost:8002/.well-known/agent.json
+```
+
+### A2A 질의 (JSON-RPC 2.0)
+
+```bash
+# 뉴스 분석
+curl -X POST http://localhost:8001/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "tasks/send",
+    "params": {
+      "id": "task-001",
+      "message": {
+        "role": "user",
+        "parts": [{"text": "삼성전자 최근 뉴스를 분석해줘"}]
+      }
+    }
+  }'
+
+# 재무제표 분석
+curl -X POST http://localhost:8002/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "tasks/send",
+    "params": {
+      "id": "task-002",
+      "message": {
+        "role": "user",
+        "parts": [{"text": "AAPL 재무제표를 분석해줘"}]
+      }
+    }
+  }'
+
+# SSE 스트리밍 (실시간 응답)
+curl -X POST http://localhost:8001/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "tasks/sendSubscribe",
+    "params": {
+      "id": "task-003",
+      "message": {
+        "role": "user",
+        "parts": [{"text": "현대차 뉴스 분석해줘"}]
+      }
+    }
+  }'
+```
+
+### A2A 메서드
+
+| 메서드 | 설명 |
+|--------|------|
+| `tasks/send` | 완료 후 전체 응답 반환 |
+| `tasks/sendSubscribe` | SSE 스트리밍 (실시간 응답) |
+
+### Docker 환경에서 질의 (Nginx 경유)
+
+```bash
+# Nginx 리버스 프록시 경유 (:80)
+curl -X POST http://localhost/agents/news/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"tasks/send","params":{"id":"t1","message":{"role":"user","parts":[{"text":"TSLA 뉴스 분석"}]}}}'
+
+curl -X POST http://localhost/agents/balance_sheet/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"tasks/send","params":{"id":"t2","message":{"role":"user","parts":[{"text":"삼성전자 재무제표 분석"}]}}}'
+
+# 에이전트 목록 디스커버리
+curl http://localhost/agents
+```
+
 ## 테스트
 
 ```bash

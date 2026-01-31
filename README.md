@@ -86,12 +86,64 @@ python test_news_agent.py 삼성전자
 python test_news_agent.py AAPL
 ```
 
-### A2A 서버
+### A2A 서버 기동
+
+각 에이전트를 별도 터미널에서 실행:
 
 ```bash
 python -m agents.news_analysis.a2a_server      # :8001
 python -m agents.balance_sheet.a2a_server       # :8002
 ```
+
+서버 정상 동작 확인 (Agent Card):
+
+```bash
+curl http://localhost:8001/.well-known/agent.json
+curl http://localhost:8002/.well-known/agent.json
+```
+
+### A2A 질의 (curl)
+
+A2A는 JSON-RPC 2.0 프로토콜을 사용합니다.
+
+```bash
+# 뉴스 분석 요청
+curl -X POST http://localhost:8001/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "tasks/send",
+    "params": {
+      "id": "task-001",
+      "message": {
+        "role": "user",
+        "parts": [{"text": "삼성전자 최근 뉴스를 분석해줘"}]
+      }
+    }
+  }'
+
+# 재무제표 분석 요청
+curl -X POST http://localhost:8002/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "tasks/send",
+    "params": {
+      "id": "task-002",
+      "message": {
+        "role": "user",
+        "parts": [{"text": "AAPL 재무제표를 분석해줘"}]
+      }
+    }
+  }'
+```
+
+| 메서드 | 설명 |
+|--------|------|
+| `tasks/send` | 완료 후 전체 응답 반환 |
+| `tasks/sendSubscribe` | SSE 스트리밍 (실시간 응답) |
 
 ### Docker (전체 서비스)
 
