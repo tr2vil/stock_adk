@@ -11,3 +11,4 @@ python-dotenv
 httpx
 beautifulsoup4
 pandas
+yfinance

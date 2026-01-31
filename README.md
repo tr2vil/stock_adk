@@ -1,177 +1,150 @@
-# StockADK - AI 주식 뉴스 분석 에이전트
+# StockADK - AI 주식 분석 멀티 에이전트 시스템
 
-Google ADK(Agent Development Kit) + A2A(Agent-to-Agent) 프로토콜 기반의 주식 뉴스 분석 시스템.
+Google ADK + A2A 프로토콜 기반의 주식 분석 멀티 에이전트 시스템.
+각 에이전트가 독립 컨테이너로 실행되며, Nginx를 통해 라우팅됩니다.
 
 ## 아키텍처
 
 ```
-                          ┌─────────────────────────────┐
-                          │      ADK Agent (Gemini)      │
-                          │    news_analysis_agent       │
-                          └──────┬──────────────┬───────┘
-                                 │              │
-                    ┌────────────▼──┐     ┌─────▼────────────┐
-                    │  한국 뉴스 도구 │     │  미국 뉴스 도구   │
-                    │  (네이버 뉴스) │     │  (Google News)   │
-                    └───────────────┘     └──────────────────┘
-
-  [사용자 질문] → ADK Runner / A2A Server → 에이전트 → 도구 호출 → 뉴스 분석 응답
+                     ┌──────────┐
+                     │  Nginx   │ :80
+                     └────┬─────┘
+           ┌──────────────┼──────────────┐
+           ▼              ▼              ▼
+   ┌──────────────┐ ┌───────────┐ ┌──────────────────┐
+   │ news_agent   │ │  backend  │ │ balance_sheet     │
+   │ :8001        │ │  :8000    │ │ _agent :8002      │
+   └──────┬───────┘ └───────────┘ └──────┬───────────┘
+          │                              │
+   ┌──────┴───────┐              ┌───────┴──────────┐
+   │네이버 / Google│              │    yfinance       │
+   │   News       │              │ (KR+US 재무제표)   │
+   └──────────────┘              └──────────────────┘
 ```
-
-- **에이전트**가 사용자 질문을 해석하여 적절한 도구를 자동 선택
-- 한국 종목명(삼성전자, 현대차) → `fetch_korean_stock_news`
-- 미국 티커(AAPL, TSLA) → `fetch_us_stock_news`
-- 수집된 뉴스를 Gemini가 분석하여 요약/심리/주요뉴스 제공
 
 ## 프로젝트 구조
 
 ```
 stock_adk/
-├── agents/news_analysis/        # 뉴스 분석 에이전트
-│   ├── agent.py                 # ADK Agent 정의 (root_agent)
-│   ├── tools.py                 # 도구: 한국/미국 뉴스 수집
-│   ├── a2a_server.py            # A2A 프로토콜 서버
-│   └── __init__.py
-├── backend/                     # FastAPI 백엔드
-│   ├── main.py
-│   ├── core/orchestrator.py
-│   └── requirements.txt
-├── frontend/                    # React 프론트엔드
-├── utils/                       # 유틸리티 (인증 등)
-├── .env                         # 환경변수 (API 키, 모델 설정)
-├── test_news_agent.py           # 에이전트 테스트
-├── test_a2a.py                  # A2A 통합 테스트
-└── docker-compose.yml
+├── agents/
+│   ├── Dockerfile                   # 에이전트 공용 Docker 이미지
+│   ├── news_analysis/               # 뉴스 분석 에이전트
+│   │   ├── agent.py                 # root_agent
+│   │   ├── tools.py                 # 뉴스 수집 (네이버, Google News)
+│   │   ├── prompt.py                # 에이전트 지시문
+│   │   ├── a2a_server.py            # A2A 서버 (:8001)
+│   │   └── __init__.py
+│   └── balance_sheet/               # 재무제표 분석 에이전트
+│       ├── agent.py                 # root_agent
+│       ├── tools.py                 # 재무제표 수집 (yfinance)
+│       ├── prompt.py                # 에이전트 지시문
+│       ├── a2a_server.py            # A2A 서버 (:8002)
+│       └── __init__.py
+├── backend/                         # FastAPI 백엔드
+├── frontend/                        # React 프론트엔드
+├── docker/nginx/nginx.conf          # 리버스 프록시 설정
+├── .env                             # 환경변수
+├── docker-compose.yml
+└── CLAUDE.md                        # AI 개발 컨텍스트
 ```
 
 ## 환경 설정
 
-### 1. 의존성 설치
+### 의존성 설치
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate          # Windows
-pip install "google-adk[a2a]" httpx beautifulsoup4 python-dotenv
+.venv\Scripts\activate
+pip install "google-adk[a2a]" httpx beautifulsoup4 python-dotenv yfinance
 ```
 
-### 2. 환경변수 (.env)
+### 환경변수 (.env)
 
 ```env
-# Google Cloud (Vertex AI)
+# Google Cloud
 GOOGLE_GENAI_USE_VERTEXAI=TRUE
 GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_CLOUD_LOCATION=us-central1
 GOOGLE_KEY='{ ... service account JSON ... }'
 
-# 모델 설정 (변경 가능)
+# 에이전트별 모델 (기본값: gemini-2.5-flash)
 NEWS_AGENT_MODEL=gemini-2.5-flash
+BALANCE_SHEET_AGENT_MODEL=gemini-2.5-flash
 
-# A2A 서버 포트
+# A2A 포트
 NEWS_AGENT_A2A_PORT=8001
+BALANCE_SHEET_AGENT_A2A_PORT=8002
 ```
 
 ## 실행 방법
 
-### 로컬 테스트 (Runner)
+### 로컬 테스트
 
 ```bash
-# 기본 테스트 (삼성전자)
-python test_news_agent.py
-
-# 특정 종목
-python test_news_agent.py 현대차
+# 뉴스 분석
+python test_news_agent.py 삼성전자
 python test_news_agent.py AAPL
-
-# 복수 종목
-python test_news_agent.py "SK하이닉스" TSLA
 ```
 
-### A2A 서버 실행
+### A2A 서버
 
 ```bash
-# 서버 시작 (포트 8001)
-python -m agents.news_analysis.a2a_server
-
-# Agent Card 확인
-curl http://localhost:8001/.well-known/agent.json
+python -m agents.news_analysis.a2a_server      # :8001
+python -m agents.balance_sheet.a2a_server       # :8002
 ```
 
-### ADK Web UI
-
-```bash
-# agents/ 디렉토리 상위에서 실행
-adk web agents/
-# http://localhost:4200 에서 UI 접근
-```
-
-### A2A 통합 테스트
-
-```bash
-# 1. 먼저 A2A 서버 실행
-python -m agents.news_analysis.a2a_server
-
-# 2. 다른 터미널에서 테스트
-python test_a2a.py
-```
-
-### Docker
+### Docker (전체 서비스)
 
 ```bash
 docker-compose up -d --build
 ```
 
-| 서비스 | URL |
-|--------|-----|
-| Backend API | http://localhost:8000 |
-| Frontend | http://localhost:5173 |
-| Grafana | http://localhost:3001 |
-| A2A Agent | http://localhost:8001 |
+| 서비스 | URL | 설명 |
+|--------|-----|------|
+| Nginx | http://localhost | 리버스 프록시 |
+| Backend API | http://localhost:8000 | FastAPI |
+| Frontend | http://localhost:5173 | React |
+| News Agent | http://localhost:8001 | 뉴스 분석 A2A |
+| Balance Sheet Agent | http://localhost:8002 | 재무제표 분석 A2A |
+| Grafana | http://localhost:3001 | 모니터링 |
 
-## 에이전트 상세
+## 에이전트 목록
 
-### News Analysis Agent
+### 1. News Analysis Agent
+
+뉴스를 수집하고 투자 심리를 분석합니다.
 
 | 항목 | 값 |
 |------|-----|
 | 이름 | `news_analysis_agent` |
-| 모델 | `gemini-2.5-flash` (변경 가능) |
+| 포트 | 8001 |
 | 도구 | `fetch_korean_stock_news`, `fetch_us_stock_news` |
+| 데이터 소스 | 네이버 뉴스 (KR), Google News RSS (US) |
 
-**분석 출력 항목:**
-1. 뉴스 요약 (3-5문장)
-2. 주요 뉴스 TOP 3 + 의미 분석
-3. 투자 심리 판단 (Positive / Neutral / Negative)
-4. 주의 사항 (리스크, 기회 요인)
+**분석 항목:** 뉴스 요약, 주요 뉴스 TOP 3, 투자 심리(Positive/Neutral/Negative), 리스크/기회 요인
 
-### 새 에이전트 추가 방법
+### 2. Balance Sheet Agent
 
-```python
-# 1. agents/new_agent/tools.py - 도구 함수 (type hint + docstring 필수)
-async def my_tool(param: str) -> dict:
-    """도구 설명. LLM이 이 docstring을 읽고 호출 여부를 판단합니다.
+재무제표를 수집하고 투자 적합성을 판단합니다.
 
-    Args:
-        param: 파라미터 설명
+| 항목 | 값 |
+|------|-----|
+| 이름 | `balance_sheet_agent` |
+| 포트 | 8002 |
+| 도구 | `fetch_korean_financials`, `fetch_us_financials` |
+| 데이터 소스 | yfinance (API 키 불필요) |
 
-    Returns:
-        dict: 결과
-    """
-    return {"result": "..."}
+**분석 항목:**
+- 단기 건전성: 유동비율, 당좌비율, 현금 보유량
+- 중기 수익성: 매출/영업이익/순이익 성장률, 마진 추세
+- 장기 안정성: 부채비율, 자기자본비율, FCF 추세
+- 투자 등급: A(적극매수) ~ F(부적합)
 
-# 2. agents/new_agent/agent.py - ADK Agent 정의
-from google.adk.agents import Agent
-from .tools import my_tool
+**종목 입력:** 한국어 종목명(삼성전자) 자동 변환, 미국 티커(AAPL) 직접 사용
 
-root_agent = Agent(
-    name="new_agent",
-    model="gemini-2.5-flash",
-    instruction="에이전트 역할 설명",
-    tools=[my_tool],
-)
+## 새 에이전트 추가 가이드
 
-# 3. agents/new_agent/__init__.py
-from . import agent
-```
+`CLAUDE.md` 참조.
 
 ## Tech Stack
 
@@ -180,7 +153,8 @@ from . import agent
 | AI Framework | Google ADK 1.23+ |
 | LLM | Gemini 2.5 Flash (Vertex AI) |
 | Protocol | A2A (Agent-to-Agent) |
-| Backend | FastAPI, Python 3.10+ |
+| Financial Data | yfinance |
+| Backend | FastAPI, Python 3.12 |
 | Frontend | React, Vite |
-| DB | PostgreSQL |
+| Proxy | Nginx |
 | Infra | Docker, Docker Compose |
