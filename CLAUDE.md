@@ -1,35 +1,95 @@
-# CLAUDE.md - StockADK 개발 컨텍스트
+# CLAUDE.md - Trading System 개발 컨텍스트
 
 ## 프로젝트 개요
 
-Google ADK + A2A 기반 주식 분석 멀티 에이전트 시스템.
-각 에이전트는 독립 컨테이너로 실행되며, 향후 오케스트레이터가 에이전트들을 조율하여 종합 분석/투자 전략을 수립할 예정.
+Google ADK + A2A Protocol 기반 멀티에이전트 자동매매 시스템.
+Orchestrator가 5개의 전문 Sub-Agent를 조율하여 종합 분석 및 투자 결정을 수행.
 
-## 에이전트 개발 패턴
-
-모든 에이전트는 아래 구조를 따른다:
+## 아키텍처
 
 ```
-agents/<agent_name>/
+┌─────────────────────────────────────────────────────────────────┐
+│                        Orchestrator (8000)                       │
+│           RemoteA2aAgent를 통해 Sub-Agent들과 A2A 통신           │
+└─────────────────────────────────────────────────────────────────┘
+        │           │           │           │           │
+        ▼           ▼           ▼           ▼           ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│  News    │ │Fundament-│ │Technical │ │  Expert  │ │   Risk   │
+│  Agent   │ │al Agent  │ │  Agent   │ │  Agent   │ │  Agent   │
+│  (8001)  │ │  (8002)  │ │  (8003)  │ │  (8004)  │ │  (8005)  │
+│  20% 가중│ │  25% 가중│ │  30% 가중│ │  15% 가중│ │  10% 가중│
+└──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
+```
+
+## 프로젝트 구조
+
+```
+trading-system/
+├── orchestrator/              # 오케스트레이터 (Port 8000)
+│   ├── __init__.py
+│   ├── agent.py               # Root Agent with RemoteA2aAgent
+│   ├── decision_engine.py     # 가중 합산 로직
+│   ├── scheduler.py           # APScheduler
+│   ├── server.py              # FastAPI + ADK API
+│   ├── prompt.py              # ORCHESTRATOR_INSTRUCTION
+│   └── Dockerfile
+├── sub_agents/                # Sub-Agent 모음
+│   ├── news_agent/            # Port 8001
+│   ├── fundamental_agent/     # Port 8002
+│   ├── technical_agent/       # Port 8003
+│   ├── expert_agent/          # Port 8004
+│   ├── risk_agent/            # Port 8005
+│   └── Dockerfile             # 공유 Dockerfile
+├── execution/                 # 주문 실행 모듈
+│   ├── __init__.py
+│   ├── kiwoom_rest.py         # 키움 REST API
+│   ├── order_manager.py       # 주문 관리자
+│   └── websocket_client.py    # 실시간 시세
+├── shared/                    # 공유 모듈
+│   ├── __init__.py
+│   ├── models.py              # Pydantic 모델
+│   ├── config.py              # pydantic-settings
+│   ├── database.py            # SQLAlchemy
+│   └── logger.py              # structlog
+├── monitoring/                # 모니터링
+│   ├── __init__.py
+│   ├── dashboard.py           # Streamlit
+│   └── alerting.py            # Telegram/Slack
+├── tests/                     # 테스트
+├── docker-compose.yml
+├── pyproject.toml
+└── .env.example
+```
+
+## Sub-Agent 개발 패턴
+
+모든 Sub-Agent는 아래 구조를 따릅니다:
+
+```
+sub_agents/<agent_name>/
 ├── __init__.py       # from . import agent
 ├── agent.py          # root_agent 정의 (Google ADK Agent)
 ├── tools.py          # 도구 함수 (async, type hint + docstring 필수)
 ├── prompt.py         # AGENT_INSTRUCTION 상수
-└── a2a_server.py     # A2A 프로토콜 서버
+└── server.py         # A2A 프로토콜 서버
 ```
 
 ### agent.py 패턴
 
 ```python
-import os, json, tempfile
+import os
+import json
+import tempfile
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # GOOGLE_KEY JSON → GOOGLE_APPLICATION_CREDENTIALS 자동 설정
 _google_key = os.getenv("GOOGLE_KEY")
 if _google_key and _google_key.strip().startswith("{"):
     if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-        _cred_dir = os.path.join(tempfile.gettempdir(), "stock_adk")
+        _cred_dir = os.path.join(tempfile.gettempdir(), "trading_system")
         os.makedirs(_cred_dir, exist_ok=True)
         _cred_path = os.path.join(_cred_dir, "service_account.json")
         with open(_cred_path, "w", encoding="utf-8") as f:
@@ -58,7 +118,7 @@ root_agent = Agent(
 - **docstring 필수**: LLM이 도구 호출 판단에 사용
 - 반환 타입은 `dict`
 - 반환 데이터 크기 주의: **15KB 이내** 권장 (초과 시 LLM 응답 실패 가능)
-- JSON 직렬화 안전: `NaN`, `Inf` → `None` 변환 필요 (`_safe_float`)
+- JSON 직렬화 안전: `NaN`, `Inf` → `None` 변환 필요
 
 ```python
 async def my_tool(param: str) -> dict:
@@ -73,9 +133,12 @@ async def my_tool(param: str) -> dict:
     return {"status": "success", "data": ...}
 ```
 
-### a2a_server.py 패턴
+### server.py 패턴
 
 ```python
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="google.adk")
+
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -83,65 +146,23 @@ load_dotenv()
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 from .agent import root_agent
 
-A2A_PORT = int(os.getenv("<AGENT_NAME>_A2A_PORT", "<port>"))
+A2A_PORT = int(os.getenv("<AGENT_NAME>_PORT", "<port>"))
 app = to_a2a(root_agent, port=A2A_PORT)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=A2A_PORT)
 ```
 
-### prompt.py 패턴
+## Sub-Agent 목록
 
-```python
-AGENT_INSTRUCTION = """\
-역할, 도구 사용법, 분석 항목, 응답 형식, 주의사항을 포함.
-"""
-```
-
-## 인프라 패턴
-
-### Docker 서비스 추가 (docker-compose.yml)
-
-```yaml
-<agent_name>_agent:
-  build:
-    context: .
-    dockerfile: ./agents/Dockerfile
-  container_name: stock_<agent_name>_agent
-  environment:
-    - AGENT_MODULE=agents.<agent_name>.a2a_server:app
-    - AGENT_PORT=<port>
-  env_file:
-    - .env
-  volumes:
-    - ./agents:/app/agents
-    - ./utils:/app/utils
-  ports:
-    - "<port>:<port>"
-  networks:
-    - stock_network
-```
-
-### Nginx 라우팅 추가 (docker/nginx/nginx.conf)
-
-```nginx
-upstream <agent_name>_agent { server <agent_name>_agent:<port>; }
-
-location /agents/<agent_name>/ {
-    proxy_pass http://<agent_name>_agent/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_http_version 1.1;
-    proxy_set_header Connection "";
-    proxy_buffering off;
-    proxy_cache off;
-    proxy_read_timeout 300s;
-}
-```
-
-## 기존 에이전트
-
-| 에이전트 | 디렉토리 | 포트 | 도구 | 데이터 소스 |
-|----------|----------|------|------|-------------|
-| news_analysis | `agents/news_analysis/` | 8001 | `fetch_korean_stock_news`, `fetch_us_stock_news` | 네이버 뉴스, Google News RSS |
-| balance_sheet | `agents/balance_sheet/` | 8002 | `fetch_korean_financials`, `fetch_us_financials` | yfinance |
+| Agent | 디렉토리 | 포트 | 가중치 | 역할 |
+|-------|----------|------|--------|------|
+| news_agent | `sub_agents/news_agent/` | 8001 | 20% | 뉴스/센티먼트 분석 |
+| fundamental_agent | `sub_agents/fundamental_agent/` | 8002 | 25% | 재무제표 분석 |
+| technical_agent | `sub_agents/technical_agent/` | 8003 | 30% | 기술적 분석 |
+| expert_agent | `sub_agents/expert_agent/` | 8004 | 15% | 전문가 신호 |
+| risk_agent | `sub_agents/risk_agent/` | 8005 | 10% | 리스크 관리 |
 
 ## 포트 할당
 
@@ -151,16 +172,32 @@ location /agents/<agent_name>/ {
 | 3001 | Grafana |
 | 5173 | Frontend |
 | 5432 | PostgreSQL |
-| 8000 | Backend API |
-| 8001 | news_analysis agent |
-| 8002 | balance_sheet agent |
-| 8003+ | 향후 에이전트용 |
+| 6379 | Redis |
+| 8000 | Orchestrator |
+| 8001 | News Agent |
+| 8002 | Fundamental Agent |
+| 8003 | Technical Agent |
+| 8004 | Expert Agent |
+| 8005 | Risk Agent |
 
-## 한국 주식 종목명 처리
+## 의사결정 로직
 
-- `_KR_NAME_MAP` 딕셔너리로 한글 → 영문 매핑 후 `yf.Search()` 호출
-- 6자리 숫자는 종목코드로 직접 사용 (`.KS` suffix)
-- `.KS`(KOSPI) 실패 시 `.KQ`(KOSDAQ) 자동 재시도
+1. Orchestrator가 5개 Sub-Agent에게 분석 요청
+2. 각 Agent 결과를 -1.0 ~ +1.0 점수로 변환
+3. 가중 합산: `final_score = Σ(agent_score × weight)`
+4. 결정:
+   - `final_score > +0.3`: **BUY**
+   - `final_score < -0.3`: **SELL**
+   - 그 외: **HOLD**
+5. Risk Agent가 "high" 리스크 → 수량 50% 감소
+
+## 안전 규칙
+
+- 단일 종목 최대 투자비율: **20%**
+- 1회 거래 최대 리스크: **2%**
+- 최소 손익비: **1.5:1**
+- 일일 최대 거래: **10회**
+- 동시 보유 최대: **10종목**
 
 ## 환경변수
 
@@ -171,17 +208,39 @@ location /agents/<agent_name>/ {
 | `GOOGLE_CLOUD_LOCATION` | GCP 리전 | us-central1 |
 | `GOOGLE_KEY` | 서비스 계정 JSON 문자열 | - |
 | `NEWS_AGENT_MODEL` | 뉴스 에이전트 모델 | gemini-2.5-flash |
-| `BALANCE_SHEET_AGENT_MODEL` | 재무제표 에이전트 모델 | gemini-2.5-flash |
+| `ORCHESTRATOR_MODEL` | 오케스트레이터 모델 | gemini-2.5-pro |
+| `DRY_RUN` | 실제 주문 실행 여부 | true |
 
-## A2A 서버 기동 및 질의
+---
 
-### 서버 기동
+## 로컬 실행 및 테스트
 
-각 에이전트를 별도 터미널에서 실행 (프로젝트 루트에서, venv 활성화 상태):
+### 사전 준비
 
 ```bash
-python -m agents.news_analysis.a2a_server      # :8001
-python -m agents.balance_sheet.a2a_server       # :8002
+# 가상환경 활성화 (Windows)
+.venv\Scripts\activate
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# 환경변수 설정 (.env 파일 필요)
+```
+
+### 개별 Agent 실행
+
+각 에이전트를 **별도 터미널**에서 실행합니다:
+
+```bash
+# Sub-Agents
+python -m sub_agents.news_agent.server         # :8001
+python -m sub_agents.fundamental_agent.server  # :8002
+python -m sub_agents.technical_agent.server    # :8003
+python -m sub_agents.expert_agent.server       # :8004
+python -m sub_agents.risk_agent.server         # :8005
+
+# Orchestrator (모든 Sub-Agent 실행 후)
+python -m orchestrator.server                  # :8000
 ```
 
 ### Agent Card 확인
@@ -189,12 +248,79 @@ python -m agents.balance_sheet.a2a_server       # :8002
 ```bash
 curl http://localhost:8001/.well-known/agent.json
 curl http://localhost:8002/.well-known/agent.json
+curl http://localhost:8003/.well-known/agent.json
+curl http://localhost:8004/.well-known/agent.json
+curl http://localhost:8005/.well-known/agent.json
 ```
 
-### A2A 질의 (JSON-RPC 2.0, A2A SDK 0.3.x)
+---
+
+## 테스트 스크립트 사용
+
+`test_agent.py` 스크립트로 간편하게 테스트할 수 있습니다:
 
 ```bash
-# 뉴스 분석
+# 기본 사용법
+python test_agent.py <port> "<message>"
+
+# 디버그 모드 (전체 JSON 응답 확인)
+python test_agent.py <port> --debug "<message>"
+```
+
+### 에이전트별 테스트 예시
+
+```bash
+# News Agent (8001)
+python test_agent.py 8001 "Analyze recent news for AAPL"
+python test_agent.py 8001 "삼성전자 최신 뉴스 분석해줘"
+
+# Fundamental Agent (8002)
+python test_agent.py 8002 "Analyze financials for TSLA"
+python test_agent.py 8002 "005930 재무제표 분석해줘"
+
+# Technical Agent (8003)
+python test_agent.py 8003 "Analyze technical indicators for AAPL"
+python test_agent.py 8003 "NVDA 기술적 분석해줘"
+
+# Expert Agent (8004)
+python test_agent.py 8004 "Get analyst ratings for MSFT"
+python test_agent.py 8004 "애플 애널리스트 의견 분석해줘"
+
+# Risk Agent (8005)
+python test_agent.py 8005 "Calculate position size for AAPL with 100000 capital"
+python test_agent.py 8005 "10만달러 자본으로 TSLA 포지션 사이징해줘"
+```
+
+---
+
+## curl을 사용한 A2A 질의
+
+A2A는 JSON-RPC 2.0 프로토콜을 사용합니다.
+
+### Windows PowerShell
+
+```powershell
+# News Agent 테스트
+$body = @{
+    jsonrpc = "2.0"
+    id = "1"
+    method = "message/send"
+    params = @{
+        message = @{
+            messageId = "m1"
+            role = "user"
+            parts = @(@{kind = "text"; text = "Analyze recent news for AAPL"})
+        }
+    }
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Uri "http://localhost:8001/" -Method Post -Body $body -ContentType "application/json"
+```
+
+### Linux/Mac (또는 Git Bash)
+
+```bash
+# News Agent (8001)
 curl -X POST http://localhost:8001/ \
   -H "Content-Type: application/json" \
   -d '{
@@ -203,14 +329,14 @@ curl -X POST http://localhost:8001/ \
     "method": "message/send",
     "params": {
       "message": {
-        "messageId": "msg-001",
+        "messageId": "m1",
         "role": "user",
         "parts": [{"kind": "text", "text": "Analyze recent news for AAPL"}]
       }
     }
   }'
 
-# 재무제표 분석
+# Fundamental Agent (8002)
 curl -X POST http://localhost:8002/ \
   -H "Content-Type: application/json" \
   -d '{
@@ -219,71 +345,144 @@ curl -X POST http://localhost:8002/ \
     "method": "message/send",
     "params": {
       "message": {
-        "messageId": "msg-002",
+        "messageId": "m1",
         "role": "user",
         "parts": [{"kind": "text", "text": "Analyze financials for TSLA"}]
       }
     }
   }'
 
-# SSE 스트리밍 (실시간 응답)
-curl -X POST http://localhost:8001/ \
+# Technical Agent (8003)
+curl -X POST http://localhost:8003/ \
   -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
   -d '{
     "jsonrpc": "2.0",
     "id": "1",
-    "method": "message/stream",
+    "method": "message/send",
     "params": {
       "message": {
-        "messageId": "msg-003",
+        "messageId": "m1",
         "role": "user",
-        "parts": [{"kind": "text", "text": "Analyze recent news for NVDA"}]
+        "parts": [{"kind": "text", "text": "Analyze technical indicators for NVDA"}]
+      }
+    }
+  }'
+
+# Expert Agent (8004)
+curl -X POST http://localhost:8004/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "m1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Get analyst ratings for MSFT"}]
+      }
+    }
+  }'
+
+# Risk Agent (8005)
+curl -X POST http://localhost:8005/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "m1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Calculate position size for AAPL with 100000 capital"}]
       }
     }
   }'
 ```
 
-> **Note**: Windows CMD에서 한글 사용 시 UTF-8 인코딩 문제가 발생할 수 있습니다.
-> PowerShell 또는 영문으로 테스트하거나, UTF-8로 저장된 JSON 파일을 사용하세요.
+### JSON 파일 사용 (Windows CMD 권장)
 
-### A2A 메서드 (A2A SDK 0.3.x)
+1. `request.json` 파일 생성:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "messageId": "m1",
+      "role": "user",
+      "parts": [{"kind": "text", "text": "Analyze technical indicators for AAPL"}]
+    }
+  }
+}
+```
+
+2. curl 실행:
+
+```bash
+curl -X POST http://localhost:8003/ -H "Content-Type: application/json" -d @request.json
+```
+
+### A2A 메서드
 
 | 메서드 | 설명 |
 |--------|------|
 | `message/send` | 완료 후 전체 응답 반환 |
 | `message/stream` | SSE 스트리밍 (실시간 응답) |
 
-### Docker 환경에서 질의 (Nginx 경유)
+---
+
+## Docker 실행
+
+### 전체 시스템 빌드 및 실행
 
 ```bash
-# Nginx 리버스 프록시 경유 (:80)
+docker-compose up --build
+```
+
+### 개별 서비스 실행
+
+```bash
+# Sub-Agents만 실행
+docker-compose up news-agent fundamental-agent technical-agent expert-agent risk-agent
+
+# Orchestrator 포함
+docker-compose up orchestrator
+```
+
+### Docker 환경에서 테스트 (Nginx 경유)
+
+```bash
+# 에이전트 목록 확인
+curl http://localhost/agents
+
+# Orchestrator Health Check
+curl http://localhost/api/health
+
+# 개별 에이전트 테스트 (Nginx 경유)
 curl -X POST http://localhost/agents/news/ \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze TSLA news"}]}}}'
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze AAPL news"}]}}}'
 
-curl -X POST http://localhost/agents/balance_sheet/ \
+curl -X POST http://localhost/agents/fundamental/ \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m2","role":"user","parts":[{"kind":"text","text":"Analyze AAPL financials"}]}}}'
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze TSLA financials"}]}}}'
 
-# 에이전트 목록 디스커버리
-curl http://localhost/agents
+curl -X POST http://localhost/agents/technical/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze NVDA technicals"}]}}}'
 ```
 
-## 테스트
-
-```bash
-# ADK Runner 기반 테스트
-python test_news_agent.py 삼성전자
-
-# A2A 통합 테스트 (서버 먼저 실행 필요)
-python -m agents.news_analysis.a2a_server &
-python test_a2a.py
-```
+---
 
 ## 주요 의존성
 
 - `google-adk[a2a]` >= 1.23
 - `yfinance` (재무제표, API 키 불필요)
 - `httpx`, `beautifulsoup4` (뉴스 스크래핑)
-- `python-dotenv` (환경변수)
+- `fastapi`, `uvicorn` (웹 서버)
+- `pydantic-settings` (설정 관리)
+- `apscheduler` (스케줄링)
