@@ -104,7 +104,7 @@ curl http://localhost:8002/.well-known/agent.json
 
 ### A2A 질의 (curl)
 
-A2A는 JSON-RPC 2.0 프로토콜을 사용합니다.
+A2A는 JSON-RPC 2.0 프로토콜을 사용합니다 (A2A SDK 0.3.x).
 
 ```bash
 # 뉴스 분석 요청
@@ -113,12 +113,12 @@ curl -X POST http://localhost:8001/ \
   -d '{
     "jsonrpc": "2.0",
     "id": "1",
-    "method": "tasks/send",
+    "method": "message/send",
     "params": {
-      "id": "task-001",
       "message": {
+        "messageId": "msg-001",
         "role": "user",
-        "parts": [{"text": "삼성전자 최근 뉴스를 분석해줘"}]
+        "parts": [{"kind": "text", "text": "Analyze recent news for AAPL"}]
       }
     }
   }'
@@ -129,21 +129,23 @@ curl -X POST http://localhost:8002/ \
   -d '{
     "jsonrpc": "2.0",
     "id": "1",
-    "method": "tasks/send",
+    "method": "message/send",
     "params": {
-      "id": "task-002",
       "message": {
+        "messageId": "msg-002",
         "role": "user",
-        "parts": [{"text": "AAPL 재무제표를 분석해줘"}]
+        "parts": [{"kind": "text", "text": "Analyze financials for TSLA"}]
       }
     }
   }'
 ```
 
+> **Note**: Windows CMD에서 한글 사용 시 UTF-8 인코딩 문제가 발생할 수 있습니다.
+
 | 메서드 | 설명 |
 |--------|------|
-| `tasks/send` | 완료 후 전체 응답 반환 |
-| `tasks/sendSubscribe` | SSE 스트리밍 (실시간 응답) |
+| `message/send` | 완료 후 전체 응답 반환 |
+| `message/stream` | SSE 스트리밍 (실시간 응답) |
 
 ### Docker (전체 서비스)
 

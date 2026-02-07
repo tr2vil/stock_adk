@@ -191,7 +191,7 @@ curl http://localhost:8001/.well-known/agent.json
 curl http://localhost:8002/.well-known/agent.json
 ```
 
-### A2A 질의 (JSON-RPC 2.0)
+### A2A 질의 (JSON-RPC 2.0, A2A SDK 0.3.x)
 
 ```bash
 # 뉴스 분석
@@ -200,12 +200,12 @@ curl -X POST http://localhost:8001/ \
   -d '{
     "jsonrpc": "2.0",
     "id": "1",
-    "method": "tasks/send",
+    "method": "message/send",
     "params": {
-      "id": "task-001",
       "message": {
+        "messageId": "msg-001",
         "role": "user",
-        "parts": [{"text": "삼성전자 최근 뉴스를 분석해줘"}]
+        "parts": [{"kind": "text", "text": "Analyze recent news for AAPL"}]
       }
     }
   }'
@@ -216,12 +216,12 @@ curl -X POST http://localhost:8002/ \
   -d '{
     "jsonrpc": "2.0",
     "id": "1",
-    "method": "tasks/send",
+    "method": "message/send",
     "params": {
-      "id": "task-002",
       "message": {
+        "messageId": "msg-002",
         "role": "user",
-        "parts": [{"text": "AAPL 재무제표를 분석해줘"}]
+        "parts": [{"kind": "text", "text": "Analyze financials for TSLA"}]
       }
     }
   }'
@@ -233,23 +233,26 @@ curl -X POST http://localhost:8001/ \
   -d '{
     "jsonrpc": "2.0",
     "id": "1",
-    "method": "tasks/sendSubscribe",
+    "method": "message/stream",
     "params": {
-      "id": "task-003",
       "message": {
+        "messageId": "msg-003",
         "role": "user",
-        "parts": [{"text": "현대차 뉴스 분석해줘"}]
+        "parts": [{"kind": "text", "text": "Analyze recent news for NVDA"}]
       }
     }
   }'
 ```
 
-### A2A 메서드
+> **Note**: Windows CMD에서 한글 사용 시 UTF-8 인코딩 문제가 발생할 수 있습니다.
+> PowerShell 또는 영문으로 테스트하거나, UTF-8로 저장된 JSON 파일을 사용하세요.
+
+### A2A 메서드 (A2A SDK 0.3.x)
 
 | 메서드 | 설명 |
 |--------|------|
-| `tasks/send` | 완료 후 전체 응답 반환 |
-| `tasks/sendSubscribe` | SSE 스트리밍 (실시간 응답) |
+| `message/send` | 완료 후 전체 응답 반환 |
+| `message/stream` | SSE 스트리밍 (실시간 응답) |
 
 ### Docker 환경에서 질의 (Nginx 경유)
 
@@ -257,11 +260,11 @@ curl -X POST http://localhost:8001/ \
 # Nginx 리버스 프록시 경유 (:80)
 curl -X POST http://localhost/agents/news/ \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":"1","method":"tasks/send","params":{"id":"t1","message":{"role":"user","parts":[{"text":"TSLA 뉴스 분석"}]}}}'
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze TSLA news"}]}}}'
 
 curl -X POST http://localhost/agents/balance_sheet/ \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":"1","method":"tasks/send","params":{"id":"t2","message":{"role":"user","parts":[{"text":"삼성전자 재무제표 분석"}]}}}'
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m2","role":"user","parts":[{"kind":"text","text":"Analyze AAPL financials"}]}}}'
 
 # 에이전트 목록 디스커버리
 curl http://localhost/agents
