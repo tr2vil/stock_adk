@@ -2,6 +2,9 @@
 FastAPI + ADK API Server for Orchestrator
 RESTful API와 ADK Agent를 통합한 서버
 """
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="google.adk")
+
 import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv

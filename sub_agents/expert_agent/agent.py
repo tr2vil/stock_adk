@@ -22,7 +22,12 @@ if _google_key and _google_key.strip().startswith("{"):
 
 from google.adk.agents import Agent
 from .prompt import AGENT_INSTRUCTION
-from .tools import collect_analyst_ratings, analyze_institutional_flow, check_insider_trading
+from .tools import (
+    lookup_ticker,
+    collect_analyst_ratings,
+    analyze_institutional_flow,
+    check_insider_trading,
+)
 
 MODEL = os.getenv("EXPERT_AGENT_MODEL", "gemini-2.5-flash")
 
@@ -31,5 +36,5 @@ root_agent = Agent(
     model=MODEL,
     description="애널리스트 리포트 및 기관/외국인 수급 분석 에이전트",
     instruction=AGENT_INSTRUCTION,
-    tools=[collect_analyst_ratings, analyze_institutional_flow, check_insider_trading],
+    tools=[lookup_ticker, collect_analyst_ratings, analyze_institutional_flow, check_insider_trading],
 )

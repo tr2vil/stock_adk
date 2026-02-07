@@ -1,4 +1,7 @@
 """A2A Server for Expert Agent."""
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="google.adk")
+
 import os
 from dotenv import load_dotenv
 

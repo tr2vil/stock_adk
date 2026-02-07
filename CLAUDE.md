@@ -136,6 +136,9 @@ async def my_tool(param: str) -> dict:
 ### server.py 패턴
 
 ```python
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="google.adk")
+
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -208,17 +211,35 @@ if __name__ == "__main__":
 | `ORCHESTRATOR_MODEL` | 오케스트레이터 모델 | gemini-2.5-pro |
 | `DRY_RUN` | 실제 주문 실행 여부 | true |
 
-## 로컬 실행
+---
+
+## 로컬 실행 및 테스트
+
+### 사전 준비
+
+```bash
+# 가상환경 활성화 (Windows)
+.venv\Scripts\activate
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# 환경변수 설정 (.env 파일 필요)
+```
 
 ### 개별 Agent 실행
 
+각 에이전트를 **별도 터미널**에서 실행합니다:
+
 ```bash
-# 각 에이전트를 별도 터미널에서 실행
+# Sub-Agents
 python -m sub_agents.news_agent.server         # :8001
 python -m sub_agents.fundamental_agent.server  # :8002
 python -m sub_agents.technical_agent.server    # :8003
 python -m sub_agents.expert_agent.server       # :8004
 python -m sub_agents.risk_agent.server         # :8005
+
+# Orchestrator (모든 Sub-Agent 실행 후)
 python -m orchestrator.server                  # :8000
 ```
 
@@ -226,11 +247,80 @@ python -m orchestrator.server                  # :8000
 
 ```bash
 curl http://localhost:8001/.well-known/agent.json
+curl http://localhost:8002/.well-known/agent.json
+curl http://localhost:8003/.well-known/agent.json
+curl http://localhost:8004/.well-known/agent.json
+curl http://localhost:8005/.well-known/agent.json
 ```
 
-### A2A 질의 (JSON-RPC 2.0)
+---
+
+## 테스트 스크립트 사용
+
+`test_agent.py` 스크립트로 간편하게 테스트할 수 있습니다:
 
 ```bash
+# 기본 사용법
+python test_agent.py <port> "<message>"
+
+# 디버그 모드 (전체 JSON 응답 확인)
+python test_agent.py <port> --debug "<message>"
+```
+
+### 에이전트별 테스트 예시
+
+```bash
+# News Agent (8001)
+python test_agent.py 8001 "Analyze recent news for AAPL"
+python test_agent.py 8001 "삼성전자 최신 뉴스 분석해줘"
+
+# Fundamental Agent (8002)
+python test_agent.py 8002 "Analyze financials for TSLA"
+python test_agent.py 8002 "005930 재무제표 분석해줘"
+
+# Technical Agent (8003)
+python test_agent.py 8003 "Analyze technical indicators for AAPL"
+python test_agent.py 8003 "NVDA 기술적 분석해줘"
+
+# Expert Agent (8004)
+python test_agent.py 8004 "Get analyst ratings for MSFT"
+python test_agent.py 8004 "애플 애널리스트 의견 분석해줘"
+
+# Risk Agent (8005)
+python test_agent.py 8005 "Calculate position size for AAPL with 100000 capital"
+python test_agent.py 8005 "10만달러 자본으로 TSLA 포지션 사이징해줘"
+```
+
+---
+
+## curl을 사용한 A2A 질의
+
+A2A는 JSON-RPC 2.0 프로토콜을 사용합니다.
+
+### Windows PowerShell
+
+```powershell
+# News Agent 테스트
+$body = @{
+    jsonrpc = "2.0"
+    id = "1"
+    method = "message/send"
+    params = @{
+        message = @{
+            messageId = "m1"
+            role = "user"
+            parts = @(@{kind = "text"; text = "Analyze recent news for AAPL"})
+        }
+    }
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Uri "http://localhost:8001/" -Method Post -Body $body -ContentType "application/json"
+```
+
+### Linux/Mac (또는 Git Bash)
+
+```bash
+# News Agent (8001)
 curl -X POST http://localhost:8001/ \
   -H "Content-Type: application/json" \
   -d '{
@@ -239,24 +329,154 @@ curl -X POST http://localhost:8001/ \
     "method": "message/send",
     "params": {
       "message": {
-        "messageId": "msg-001",
+        "messageId": "m1",
         "role": "user",
-        "parts": [{"kind": "text", "text": "Analyze AAPL news"}]
+        "parts": [{"kind": "text", "text": "Analyze recent news for AAPL"}]
+      }
+    }
+  }'
+
+# Fundamental Agent (8002)
+curl -X POST http://localhost:8002/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "m1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Analyze financials for TSLA"}]
+      }
+    }
+  }'
+
+# Technical Agent (8003)
+curl -X POST http://localhost:8003/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "m1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Analyze technical indicators for NVDA"}]
+      }
+    }
+  }'
+
+# Expert Agent (8004)
+curl -X POST http://localhost:8004/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "m1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Get analyst ratings for MSFT"}]
+      }
+    }
+  }'
+
+# Risk Agent (8005)
+curl -X POST http://localhost:8005/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "m1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Calculate position size for AAPL with 100000 capital"}]
       }
     }
   }'
 ```
 
-## Docker 실행
+### JSON 파일 사용 (Windows CMD 권장)
+
+1. `request.json` 파일 생성:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "messageId": "m1",
+      "role": "user",
+      "parts": [{"kind": "text", "text": "Analyze technical indicators for AAPL"}]
+    }
+  }
+}
+```
+
+2. curl 실행:
 
 ```bash
-# 전체 시스템 빌드 및 실행
-docker-compose up --build
-
-# Nginx 경유 테스트
-curl http://localhost/agents
-curl http://localhost/api/health
+curl -X POST http://localhost:8003/ -H "Content-Type: application/json" -d @request.json
 ```
+
+### A2A 메서드
+
+| 메서드 | 설명 |
+|--------|------|
+| `message/send` | 완료 후 전체 응답 반환 |
+| `message/stream` | SSE 스트리밍 (실시간 응답) |
+
+---
+
+## Docker 실행
+
+### 전체 시스템 빌드 및 실행
+
+```bash
+docker-compose up --build
+```
+
+### 개별 서비스 실행
+
+```bash
+# Sub-Agents만 실행
+docker-compose up news-agent fundamental-agent technical-agent expert-agent risk-agent
+
+# Orchestrator 포함
+docker-compose up orchestrator
+```
+
+### Docker 환경에서 테스트 (Nginx 경유)
+
+```bash
+# 에이전트 목록 확인
+curl http://localhost/agents
+
+# Orchestrator Health Check
+curl http://localhost/api/health
+
+# 개별 에이전트 테스트 (Nginx 경유)
+curl -X POST http://localhost/agents/news/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze AAPL news"}]}}}'
+
+curl -X POST http://localhost/agents/fundamental/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze TSLA financials"}]}}}'
+
+curl -X POST http://localhost/agents/technical/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze NVDA technicals"}]}}}'
+```
+
+---
 
 ## 주요 의존성
 

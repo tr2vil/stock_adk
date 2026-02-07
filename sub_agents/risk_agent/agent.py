@@ -22,7 +22,7 @@ if _google_key and _google_key.strip().startswith("{"):
 
 from google.adk.agents import Agent
 from .prompt import AGENT_INSTRUCTION
-from .tools import calculate_position_size, assess_portfolio_risk
+from .tools import lookup_ticker, calculate_position_size, assess_portfolio_risk
 
 MODEL = os.getenv("RISK_AGENT_MODEL", "gemini-2.5-flash")
 
@@ -31,5 +31,5 @@ root_agent = Agent(
     model=MODEL,
     description="포지션 사이징 및 리스크 관리 에이전트",
     instruction=AGENT_INSTRUCTION,
-    tools=[calculate_position_size, assess_portfolio_risk],
+    tools=[lookup_ticker, calculate_position_size, assess_portfolio_risk],
 )

@@ -15,6 +15,7 @@ from .models import (
     TradeDecision,
 )
 from .config import settings
+from .ticker_utils import lookup_ticker, lookup_us_ticker, lookup_kr_ticker
 
 __all__ = [
     # Enums
@@ -34,4 +35,8 @@ __all__ = [
     "TradeDecision",
     # Config
     "settings",
+    # Ticker Utils
+    "lookup_ticker",
+    "lookup_us_ticker",
+    "lookup_kr_ticker",
 ]

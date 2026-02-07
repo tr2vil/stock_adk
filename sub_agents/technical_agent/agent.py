@@ -22,7 +22,7 @@ if _google_key and _google_key.strip().startswith("{"):
 
 from google.adk.agents import Agent
 from .prompt import AGENT_INSTRUCTION
-from .tools import analyze_technical, detect_patterns
+from .tools import lookup_ticker, analyze_technical, detect_patterns
 
 MODEL = os.getenv("TECHNICAL_AGENT_MODEL", "gemini-2.5-flash")
 
@@ -31,5 +31,5 @@ root_agent = Agent(
     model=MODEL,
     description="차트 기술적 분석 및 패턴 인식 에이전트",
     instruction=AGENT_INSTRUCTION,
-    tools=[analyze_technical, detect_patterns],
+    tools=[lookup_ticker, analyze_technical, detect_patterns],
 )

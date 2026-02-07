@@ -3,6 +3,25 @@ Risk Agent Tools - 리스크 관리 도구
 포지션 사이징, 손절/익절 설정, 포트폴리오 리스크 평가
 """
 import yfinance as yf
+from shared.ticker_utils import lookup_ticker as _lookup_ticker
+
+
+async def lookup_ticker(query: str) -> dict:
+    """종목명 또는 티커를 조회하여 정확한 티커 정보를 반환합니다.
+
+    한글 종목명(테슬라, 삼성전자), 영문 회사명(Tesla, Apple),
+    또는 티커(AAPL, 005930)를 입력하면 해당 종목의 정보를 반환합니다.
+
+    다른 도구를 호출하기 전에 이 도구를 먼저 사용하여 정확한 티커를 확인하세요.
+
+    Args:
+        query: 종목명 또는 티커 (예: "테슬라", "Tesla", "TSLA", "삼성전자", "005930")
+
+    Returns:
+        dict: 조회 결과. ticker, market, company_name 포함.
+              예: {"status": "success", "ticker": "TSLA", "market": "US", "company_name": "Tesla, Inc."}
+    """
+    return _lookup_ticker(query)
 
 
 async def calculate_position_size(
