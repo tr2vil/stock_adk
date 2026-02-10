@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from shared.middleware import A2ALoggingMiddleware
 from .agent import root_agent
 from .scheduler import start_scheduler, stop_scheduler
 
@@ -52,6 +53,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# A2A request/response logging middleware
+app.add_middleware(A2ALoggingMiddleware, agent_name="orchestrator")
 
 
 # Request/Response models

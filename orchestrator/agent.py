@@ -39,7 +39,7 @@ RISK_AGENT_PORT = os.getenv("RISK_AGENT_PORT", "8005")
 # Remote Sub-Agent connections via A2A Protocol
 # google-adk 1.24+: agent_card URL must point to the agent card JSON endpoint,
 # not the RPC root. The resolver GETs this URL to fetch the AgentCard.
-AGENT_CARD_PATH = "/.well-known/agent.json"
+AGENT_CARD_PATH = "/.well-known/agent-card.json"
 
 news_agent = RemoteA2aAgent(
     name="news_agent",

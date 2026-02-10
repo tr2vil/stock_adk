@@ -8,10 +8,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
+from shared.middleware import A2ALoggingMiddleware
 from .agent import root_agent
 
+A2A_HOST = os.getenv("A2A_HOST", "localhost")
 A2A_PORT = int(os.getenv("EXPERT_AGENT_PORT", "8004"))
-app = to_a2a(root_agent, port=A2A_PORT)
+app = to_a2a(root_agent, host=A2A_HOST, port=A2A_PORT)
+app.add_middleware(A2ALoggingMiddleware, agent_name="expert_agent")
 
 if __name__ == "__main__":
     import uvicorn
