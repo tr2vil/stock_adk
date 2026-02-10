@@ -18,12 +18,19 @@ from pydantic import BaseModel
 from .agent import root_agent
 from .scheduler import start_scheduler, stop_scheduler
 
+# ADK sub-app startup handlers (populated below, executed in lifespan)
+_adk_startup_handlers = []
+
 
 # Lifespan handler for startup/shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    # Startup
+    # Startup: trigger ADK sub-app route registration
+    # to_a2a() registers A2A routes in on_startup, but mounted sub-apps'
+    # startup events are not called automatically by FastAPI's lifespan.
+    for handler in _adk_startup_handlers:
+        await handler()
     # start_scheduler()  # Uncomment to enable scheduled analysis
     yield
     # Shutdown
@@ -105,6 +112,10 @@ try:
 
     ORCHESTRATOR_PORT = int(os.getenv("ORCHESTRATOR_PORT", "8000"))
     adk_app = to_a2a(root_agent, port=ORCHESTRATOR_PORT)
+
+    # Capture startup handlers before mounting — FastAPI lifespan does not
+    # propagate on_startup to mounted sub-apps, so we trigger them manually.
+    _adk_startup_handlers.extend(adk_app.router.on_startup)
 
     # Mount ADK app at /adk path
     app.mount("/adk", adk_app)

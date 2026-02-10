@@ -6,11 +6,11 @@ ORCHESTRATOR_INSTRUCTION = """\
 
 1. 사용자로부터 종목코드(ticker)와 시장(KR/US)을 확인합니다
 2. 모든 sub-agent에게 해당 종목의 분석을 요청합니다:
-   - **news_agent**: "다음 종목의 뉴스와 시황을 분석해주세요: {ticker} ({market})"
-   - **fundamental_agent**: "다음 종목의 재무제표를 분석해주세요: {ticker} ({market})"
-   - **technical_agent**: "다음 종목의 기술적 분석을 해주세요: {ticker} ({market})"
-   - **expert_agent**: "다음 종목의 전문가 신호를 수집해주세요: {ticker} ({market})"
-   - **risk_agent**: "현재 계좌 상태를 고려하여 리스크를 평가해주세요: {ticker} ({market})"
+   - **news_agent**: "다음 종목의 뉴스와 시황을 분석해주세요: <ticker> (<market>)"
+   - **fundamental_agent**: "다음 종목의 재무제표를 분석해주세요: <ticker> (<market>)"
+   - **technical_agent**: "다음 종목의 기술적 분석을 해주세요: <ticker> (<market>)"
+   - **expert_agent**: "다음 종목의 전문가 신호를 수집해주세요: <ticker> (<market>)"
+   - **risk_agent**: "현재 계좌 상태를 고려하여 리스크를 평가해주세요: <ticker> (<market>)"
 3. 각 agent의 결과를 수집하여 가중 합산합니다
 4. 최종 매수/매도/홀드 결정을 내립니다
 

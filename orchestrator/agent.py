@@ -37,34 +37,38 @@ RISK_AGENT_HOST = os.getenv("RISK_AGENT_HOST", "localhost")
 RISK_AGENT_PORT = os.getenv("RISK_AGENT_PORT", "8005")
 
 # Remote Sub-Agent connections via A2A Protocol
+# google-adk 1.24+: agent_card URL must point to the agent card JSON endpoint,
+# not the RPC root. The resolver GETs this URL to fetch the AgentCard.
+AGENT_CARD_PATH = "/.well-known/agent.json"
+
 news_agent = RemoteA2aAgent(
     name="news_agent",
+    agent_card=f"http://{NEWS_AGENT_HOST}:{NEWS_AGENT_PORT}{AGENT_CARD_PATH}",
     description="종목 뉴스 수집 및 시황/센티먼트 분석",
-    agent_url=f"http://{NEWS_AGENT_HOST}:{NEWS_AGENT_PORT}/",
 )
 
 fundamental_agent = RemoteA2aAgent(
     name="fundamental_agent",
+    agent_card=f"http://{FUNDAMENTAL_AGENT_HOST}:{FUNDAMENTAL_AGENT_PORT}{AGENT_CARD_PATH}",
     description="재무제표 분석 및 밸류에이션 평가",
-    agent_url=f"http://{FUNDAMENTAL_AGENT_HOST}:{FUNDAMENTAL_AGENT_PORT}/",
 )
 
 technical_agent = RemoteA2aAgent(
     name="technical_agent",
+    agent_card=f"http://{TECHNICAL_AGENT_HOST}:{TECHNICAL_AGENT_PORT}{AGENT_CARD_PATH}",
     description="차트 기술적 분석 및 패턴 인식",
-    agent_url=f"http://{TECHNICAL_AGENT_HOST}:{TECHNICAL_AGENT_PORT}/",
 )
 
 expert_agent = RemoteA2aAgent(
     name="expert_agent",
+    agent_card=f"http://{EXPERT_AGENT_HOST}:{EXPERT_AGENT_PORT}{AGENT_CARD_PATH}",
     description="애널리스트 리포트 및 기관/외국인 수급 분석",
-    agent_url=f"http://{EXPERT_AGENT_HOST}:{EXPERT_AGENT_PORT}/",
 )
 
 risk_agent = RemoteA2aAgent(
     name="risk_agent",
+    agent_card=f"http://{RISK_AGENT_HOST}:{RISK_AGENT_PORT}{AGENT_CARD_PATH}",
     description="포지션 사이징 및 리스크 관리",
-    agent_url=f"http://{RISK_AGENT_HOST}:{RISK_AGENT_PORT}/",
 )
 
 MODEL = os.getenv("ORCHESTRATOR_MODEL", "gemini-2.5-pro")
