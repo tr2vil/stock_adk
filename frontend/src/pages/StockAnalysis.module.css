@@ -1,0 +1,184 @@
+.pageHeader {
+    display: flex;
+    align-items: center;
+    padding: 1rem 0;
+    color: #212529;
+}
+
+.formCard {
+    border-radius: 12px;
+}
+
+.spinner {
+    animation: rotate 1.5s linear infinite;
+}
+
+@keyframes rotate {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.loadingCard {
+    border-radius: 12px;
+}
+
+.stages {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+}
+
+.stageBadge {
+    background-color: #e9ecef;
+    color: #495057;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+.resultCard {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.resultHeader {
+    padding: 1rem 1.5rem;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.resultBody {
+    padding: 1.5rem;
+    line-height: 1.7;
+}
+
+.resultBody table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.resultBody th,
+.resultBody td {
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+.resultBody th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.resultBody h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.resultBody ul {
+    padding-left: 1.25rem;
+}
+
+.resultBody li {
+    margin-bottom: 0.25rem;
+}
+
+/* Recent Searches */
+.recentSection {
+    border-radius: 12px;
+}
+
+.recentHeader {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 12px 12px 0 0;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+.recentList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.recentItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.recentItem:hover {
+    background-color: #f0f4ff;
+}
+
+.recentInfo {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.recentName {
+    font-weight: 500;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recentTicker {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-left: 0.35rem;
+    flex-shrink: 0;
+}
+
+.recentMeta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    margin-left: 1rem;
+}
+
+.recentTime {
+    color: #adb5bd;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.recentRemove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: #adb5bd;
+    padding: 0.2rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s;
+}
+
+.recentRemove:hover {
+    color: #dc3545;
+    background-color: #fee2e2;
+}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, MessageSquare, Briefcase, BarChart3, Settings } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Briefcase, BarChart3, Settings, Search } from 'lucide-react';
 import styles from './Navbar.module.css';
 
 const Navbar = () => {
@@ -37,6 +37,14 @@ const Navbar = () => {
                         <li className="nav-item">
                             <NavLink
                                 className={({ isActive }) => `nav-link d-flex align-items-center ${styles.navLink} ${isActive ? styles.activeLink : ''}`}
+                                to="/stock-analysis"
+                            >
+                                <Search size={18} className="me-1" /> 종목 분석
+                            </NavLink>
+                        </li>
+                        <li className="nav-item">
+                            <NavLink
+                                className={({ isActive }) => `nav-link d-flex align-items-center ${styles.navLink} ${isActive ? styles.activeLink : ''}`}
                                 to="/portfolio"
                             >
                                 <Briefcase size={18} className="me-1" /> 포트폴리오
@@ -49,9 +57,9 @@ const Navbar = () => {
                             <span className="badge bg-success me-1">Backend Online</span>
                             <span className="badge bg-primary">Gemini 2.5 Flash</span>
                         </div>
-                        <button className="btn btn-outline-light btn-sm">
+                        <NavLink to="/settings" className="btn btn-outline-light btn-sm">
                             <Settings size={18} />
-                        </button>
+                        </NavLink>
                     </div>
                 </div>
             </div>

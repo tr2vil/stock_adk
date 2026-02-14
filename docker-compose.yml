@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # =============================================
   # Orchestrator
@@ -18,6 +16,7 @@ services:
       - TECHNICAL_AGENT_HOST=technical-agent
       - EXPERT_AGENT_HOST=expert-agent
       - RISK_AGENT_HOST=risk-agent
+      - LOG_FORMAT=json
     env_file:
       - .env
     depends_on:
@@ -43,6 +42,8 @@ services:
     environment:
       - AGENT_MODULE=sub_agents.news_agent.server:app
       - AGENT_PORT=8001
+      - A2A_HOST=news-agent
+      - LOG_FORMAT=json
     env_file:
       - .env
     volumes:
@@ -50,6 +51,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8001:8001"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -62,6 +65,8 @@ services:
     environment:
       - AGENT_MODULE=sub_agents.fundamental_agent.server:app
       - AGENT_PORT=8002
+      - A2A_HOST=fundamental-agent
+      - LOG_FORMAT=json
     env_file:
       - .env
     volumes:
@@ -69,6 +74,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8002:8002"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -81,6 +88,8 @@ services:
     environment:
       - AGENT_MODULE=sub_agents.technical_agent.server:app
       - AGENT_PORT=8003
+      - A2A_HOST=technical-agent
+      - LOG_FORMAT=json
     env_file:
       - .env
     volumes:
@@ -88,6 +97,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8003:8003"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -100,6 +111,8 @@ services:
     environment:
       - AGENT_MODULE=sub_agents.expert_agent.server:app
       - AGENT_PORT=8004
+      - A2A_HOST=expert-agent
+      - LOG_FORMAT=json
     env_file:
       - .env
     volumes:
@@ -107,6 +120,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8004:8004"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -119,6 +134,8 @@ services:
     environment:
       - AGENT_MODULE=sub_agents.risk_agent.server:app
       - AGENT_PORT=8005
+      - A2A_HOST=risk-agent
+      - LOG_FORMAT=json
     env_file:
       - .env
     volumes:
@@ -126,6 +143,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8005:8005"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -166,6 +185,40 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - loki
+    networks:
+      - trading_network
+    restart: unless-stopped
+
+  # =============================================
+  # Logging Stack
+  # =============================================
+  loki:
+    image: grafana/loki:3.4
+    container_name: trading_loki
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./docker/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    networks:
+      - trading_network
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.4
+    container_name: trading_promtail
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./docker/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
     networks:
       - trading_network
     restart: unless-stopped
@@ -192,7 +245,7 @@ services:
     restart: unless-stopped
 
   # =============================================
-  # Frontend (Optional)
+  # Frontend
   # =============================================
   frontend:
     build:
@@ -203,8 +256,7 @@ services:
       - "5173:5173"
     networks:
       - trading_network
-    profiles:
-      - frontend
+    restart: unless-stopped
 
 networks:
   trading_network:
@@ -212,3 +264,5 @@ networks:
 
 volumes:
   pgdata:
+  loki_data:
+  grafana_data:

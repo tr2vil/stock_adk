@@ -9,6 +9,12 @@ export default defineConfig({
         port: 5173,
         watch: {
             usePolling: true
+        },
+        proxy: {
+            '/api': {
+                target: 'http://orchestrator:8000',
+                changeOrigin: true,
+            }
         }
     }
 })

@@ -56,6 +56,23 @@ trading-system/
 │   ├── __init__.py
 │   ├── dashboard.py           # Streamlit
 │   └── alerting.py            # Telegram/Slack
+├── frontend/                  # Frontend (React + Vite)
+│   ├── src/
+│   │   ├── main.jsx           # 진입점
+│   │   ├── App.jsx            # 라우터 설정
+│   │   ├── services/
+│   │   │   └── api.js         # Model: API 통신 (axios)
+│   │   ├── hooks/
+│   │   │   └── useStockAnalysis.js  # Controller: 상태 관리
+│   │   ├── pages/
+│   │   │   ├── Dashboard.jsx         # 대시보드
+│   │   │   ├── AIAssistant.jsx       # AI 비서 (A2A 채팅)
+│   │   │   └── StockAnalysis.jsx     # View: 종목 분석 페이지
+│   │   └── components/
+│   │       └── Navbar.jsx     # 네비게이션 바
+│   ├── vite.config.js         # Vite 설정 + API 프록시
+│   ├── package.json
+│   └── Dockerfile
 ├── tests/                     # 테스트
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -255,6 +272,79 @@ curl http://localhost:8005/.well-known/agent.json
 
 ---
 
+## Orchestrator 종합 분석 (A2A)
+
+Orchestrator는 5개 Sub-Agent를 순차적으로 호출하여 종합 분석을 수행합니다.
+A2A 엔드포인트는 FastAPI 앱의 `/adk/` 경로에 마운트되어 있습니다.
+
+### 로컬 실행 시
+
+```bash
+# 미국 주식 분석
+curl -s -X POST http://localhost:8000/adk/ \
+  -H "Content-Type: application/json; charset=utf-8" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"AAPL US market stock analysis please"}]}}}'
+
+# 한국 주식 분석
+curl -s -X POST http://localhost:8000/adk/ \
+  -H "Content-Type: application/json; charset=utf-8" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"삼성전자 KR market 주식 분석해줘"}]}}}'
+```
+
+### Docker 환경 (Nginx 경유)
+
+```bash
+curl -s -X POST http://localhost/adk/ \
+  -H "Content-Type: application/json; charset=utf-8" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"AAPL US market stock analysis please"}]}}}'
+```
+
+### Windows PowerShell
+
+```powershell
+$body = @{
+    jsonrpc = "2.0"
+    id = "1"
+    method = "message/send"
+    params = @{
+        message = @{
+            messageId = "m1"
+            role = "user"
+            parts = @(@{kind = "text"; text = "삼성전자 KR market 주식 분석해줘"})
+        }
+    }
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Uri "http://localhost:8000/adk/" -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8"
+```
+
+### Orchestrator 엔드포인트 정리
+
+| 엔드포인트 | 메서드 | 설명 |
+|------------|--------|------|
+| `/api/health` | GET | Health check |
+| `/api/agents` | GET | Sub-agent 목록 |
+| `/api/analyze` | POST | **종목 분석 요청 (InMemoryRunner)** |
+| `/adk/` | POST | **A2A 종합 분석 (JSON-RPC 2.0)** |
+| `/adk/.well-known/agent.json` | GET | Orchestrator Agent Card |
+
+### 응답 구조
+
+Orchestrator는 프롬프트에 정의된 형식대로 마크다운 응답을 반환합니다:
+
+1. **종합 분석 요약** - 각 Agent 결과 요약
+2. **점수 산출** - Agent별 신호/점수/가중치/가중점수 테이블
+3. **최종 결정** - BUY/SELL/HOLD, 수량, 목표가, 손절가
+4. **판단 근거** - 2~3문장 종합 판단
+
+### 주의사항
+
+- **한글 인코딩**: curl로 한글 전송 시 `charset=utf-8` 헤더 필수. Windows CMD에서는 JSON 파일(`-d @request.json`) 사용 권장
+- **응답 시간**: 5개 Sub-Agent를 순차 호출하므로 30초~2분 소요 가능
+- **ticker 명시**: "AAPL US market" 또는 "삼성전자 KR market"처럼 ticker와 market을 함께 제공하면 추가 질의 없이 바로 분석 시작
+
+---
+
 ## 테스트 스크립트 사용
 
 `test_agent.py` 스크립트로 간편하게 테스트할 수 있습니다:
@@ -440,17 +530,17 @@ curl -X POST http://localhost:8003/ -H "Content-Type: application/json" -d @requ
 ### 전체 시스템 빌드 및 실행
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 ### 개별 서비스 실행
 
 ```bash
-# Sub-Agents만 실행
-docker-compose up news-agent fundamental-agent technical-agent expert-agent risk-agent
+# Orchestrator + Sub-Agents + 인프라 (depends_on으로 자동 포함)
+docker compose up --build orchestrator
 
-# Orchestrator 포함
-docker-compose up orchestrator
+# Sub-Agents만 실행
+docker compose up news-agent fundamental-agent technical-agent expert-agent risk-agent
 ```
 
 ### Docker 환경에서 테스트 (Nginx 경유)
@@ -461,6 +551,16 @@ curl http://localhost/agents
 
 # Orchestrator Health Check
 curl http://localhost/api/health
+
+# Orchestrator 종합 분석 (A2A)
+curl -s -X POST http://localhost/adk/ \
+  -H "Content-Type: application/json; charset=utf-8" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"AAPL US market stock analysis please"}]}}}'
+
+# 한국 주식 종합 분석
+curl -s -X POST http://localhost/adk/ \
+  -H "Content-Type: application/json; charset=utf-8" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"삼성전자 KR market 주식 분석해줘"}]}}}'
 
 # 개별 에이전트 테스트 (Nginx 경유)
 curl -X POST http://localhost/agents/news/ \
@@ -475,6 +575,64 @@ curl -X POST http://localhost/agents/technical/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze NVDA technicals"}]}}}'
 ```
+
+---
+
+## Frontend (React + Vite)
+
+### 아키텍처 (MVC 패턴)
+
+```
+Model (데이터)         → services/api.js          axios HTTP 통신
+Controller (상태/로직) → hooks/useStockAnalysis.js  useState + useCallback
+View (렌더링)          → pages/StockAnalysis.jsx   JSX + react-markdown
+```
+
+### 페이지 구성
+
+| 경로 | 컴포넌트 | 설명 |
+|------|----------|------|
+| `/` | `Dashboard` | 대시보드 |
+| `/ai-assistant` | `AIAssistant` | AI 비서 (A2A 채팅) |
+| `/stock-analysis` | `StockAnalysis` | 종목 분석 (종목코드 + 마켓 입력 → 마크다운 결과) |
+| `/portfolio` | - | 포트폴리오 (준비중) |
+
+### API 프록시 (CORS 해결)
+
+Vite dev server가 `/api` 요청을 Orchestrator로 프록시합니다:
+
+```
+브라우저 → localhost:5173/api/analyze → (Vite proxy) → orchestrator:8000/api/analyze
+```
+
+`vite.config.js`:
+```javascript
+proxy: {
+    '/api': { target: 'http://orchestrator:8000', changeOrigin: true }
+}
+```
+
+### Docker 실행
+
+Frontend는 `docker compose up --build`로 전체 시스템과 함께 기동됩니다.
+별도 실행 불필요 (docker-compose.yml에 frontend 서비스 포함).
+
+```bash
+# 전체 시스템 (Backend + Frontend)
+docker compose up --build
+
+# Frontend 접속
+http://localhost:5173
+```
+
+### Frontend 의존성
+
+- `react`, `react-dom` 18.x
+- `react-router-dom` 6.x (클라이언트 라우팅)
+- `axios` (HTTP 클라이언트)
+- `react-markdown` + `remark-gfm` (마크다운 렌더링)
+- `bootstrap` 5.x (UI 프레임워크)
+- `lucide-react` (아이콘)
 
 ---
 

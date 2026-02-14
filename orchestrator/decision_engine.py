@@ -2,10 +2,16 @@
 Decision Engine - 가중 합산 및 최종 판단 로직
 Based on TRADING_SYSTEM_SPEC.md Section 4.2
 """
-from shared.models import TradeDecision, Market, SignalStrength
+import json
 
-# Agent weights for final score calculation
-WEIGHTS = {
+from shared.models import TradeDecision, Market, SignalStrength
+from shared.redis_client import get_sync_redis, seed_defaults
+from shared.logger import get_logger
+
+_logger = get_logger("orchestrator.decision_engine")
+
+# Default values (used as fallback and for Redis seeding)
+_DEFAULT_WEIGHTS = {
     "technical": 0.30,
     "fundamental": 0.25,
     "news": 0.20,
@@ -13,11 +19,51 @@ WEIGHTS = {
     "risk": 0.10,
 }
 
-# Decision thresholds
-THRESHOLDS = {
+_DEFAULT_THRESHOLDS = {
     "buy": 0.3,
     "sell": -0.3,
 }
+
+# Seed defaults into Redis (only if keys do not exist)
+seed_defaults({
+    "weights": json.dumps(_DEFAULT_WEIGHTS),
+    "thresholds": json.dumps(_DEFAULT_THRESHOLDS),
+})
+
+
+def _load_weights() -> dict:
+    try:
+        raw = get_sync_redis().get("weights")
+        if raw:
+            return json.loads(raw)
+    except Exception as e:
+        _logger.warning("weights_load_failed", error=str(e))
+    return dict(_DEFAULT_WEIGHTS)
+
+
+def _load_thresholds() -> dict:
+    try:
+        raw = get_sync_redis().get("thresholds")
+        if raw:
+            return json.loads(raw)
+    except Exception as e:
+        _logger.warning("thresholds_load_failed", error=str(e))
+    return dict(_DEFAULT_THRESHOLDS)
+
+
+# Agent weights for final score calculation
+WEIGHTS = _load_weights()
+
+# Decision thresholds
+THRESHOLDS = _load_thresholds()
+
+
+def reload_config():
+    """Reload WEIGHTS and THRESHOLDS from Redis."""
+    global WEIGHTS, THRESHOLDS
+    WEIGHTS = _load_weights()
+    THRESHOLDS = _load_thresholds()
+    _logger.info("config_reloaded", weights=WEIGHTS, thresholds=THRESHOLDS)
 
 # Signal to score mapping
 SIGNAL_SCORES = {
