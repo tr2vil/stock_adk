@@ -37,7 +37,7 @@ def setup_logging(level: str = "INFO"):
 
     # Choose renderer based on LOG_FORMAT
     if log_format == "json":
-        processors.append(structlog.processors.JSONRenderer())
+        processors.append(structlog.processors.JSONRenderer(ensure_ascii=False))
     else:
         processors.append(structlog.dev.ConsoleRenderer(colors=True))
 

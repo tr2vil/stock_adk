@@ -33,27 +33,95 @@
     },
     {
       "title": "A2A Request / Response Logs",
-      "type": "logs",
+      "type": "table",
       "gridPos": { "h": 12, "w": 24, "x": 0, "y": 6 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "{service=~\"$service\", event=~\"a2a_request|a2a_response\"} | json",
+          "expr": "{service=~\"$service\", event=~\"a2a_request|a2a_response\"} | json | __error__=\"\"",
           "queryType": "range",
           "refId": "A"
         }
       ],
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": { "source": "labels", "format": "auto" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "id": true, "tsNs": true, "labels": true, "Line": true, "line": true,
+              "__error__": true, "__error_details__": true,
+              "event_extracted": true, "level_extracted": true, "logger_name": true
+            },
+            "indexByName": {
+              "Time": 0, "service": 1, "level": 2, "event": 3, "agent": 4,
+              "method": 5, "status": 6, "duration_ms": 7, "response_length": 8,
+              "response_preview": 9, "error": 10
+            },
+            "renameByName": {
+              "Time": "시간", "service": "서비스", "level": "레벨", "event": "이벤트",
+              "agent": "에이전트", "method": "메서드", "status": "상태",
+              "duration_ms": "소요시간(ms)", "response_length": "응답크기",
+              "response_preview": "응답 미리보기", "error": "에러"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true, "inspect": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "레벨" },
+            "properties": [
+              { "id": "custom.width", "value": 80 },
+              { "id": "mappings", "value": [
+                { "type": "value", "options": { "error": { "text": "ERROR", "color": "red" } } },
+                { "type": "value", "options": { "warning": { "text": "WARN", "color": "yellow" } } },
+                { "type": "value", "options": { "info": { "text": "INFO", "color": "green" } } }
+              ]},
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "소요시간(ms)" },
+            "properties": [
+              { "id": "unit", "value": "ms" }, { "id": "custom.width", "value": 120 },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null }, { "color": "yellow", "value": 30000 }, { "color": "red", "value": 60000 }
+              ]}},
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "응답크기" },
+            "properties": [{ "id": "unit", "value": "decbytes" }, { "id": "custom.width", "value": 100 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "시간" },
+            "properties": [{ "id": "custom.width", "value": 170 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "이벤트" },
+            "properties": [{ "id": "custom.width", "value": 140 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "응답 미리보기" },
+            "properties": [{ "id": "custom.width", "value": 300 }]
+          }
+        ]
+      },
       "options": {
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "prettifyLogMessage": false,
-        "enableLogDetails": true,
-        "sortOrder": "Descending",
-        "dedupStrategy": "none"
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "시간" }],
+        "cellHeight": "sm",
+        "footer": { "show": true, "countRows": true, "reducer": ["count"] }
       }
     },
     {
@@ -120,48 +188,177 @@
     },
     {
       "title": "Error Logs",
-      "type": "logs",
+      "type": "table",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 26 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "{service=~\"$service\", level=\"error\"} | json",
+          "expr": "{service=~\"$service\", level=\"error\"} | json | __error__=\"\"",
           "queryType": "range",
           "refId": "A"
         }
       ],
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": { "source": "labels", "format": "auto" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "id": true, "tsNs": true, "labels": true, "Line": true, "line": true,
+              "__error__": true, "__error_details__": true,
+              "event_extracted": true, "level_extracted": true, "logger_name": true
+            },
+            "indexByName": {
+              "Time": 0, "service": 1, "level": 2, "event": 3, "agent": 4,
+              "error": 5, "last_error": 6, "attempt": 7, "url": 8
+            },
+            "renameByName": {
+              "Time": "시간", "service": "서비스", "level": "레벨", "event": "이벤트",
+              "agent": "에이전트", "error": "에러", "last_error": "최종 에러",
+              "attempt": "시도", "url": "URL"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true, "inspect": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "레벨" },
+            "properties": [
+              { "id": "custom.width", "value": 80 },
+              { "id": "mappings", "value": [
+                { "type": "value", "options": { "error": { "text": "ERROR", "color": "red" } } }
+              ]},
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "에러" },
+            "properties": [
+              { "id": "custom.width", "value": 350 },
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "시간" },
+            "properties": [{ "id": "custom.width", "value": 170 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "이벤트" },
+            "properties": [{ "id": "custom.width", "value": 200 }]
+          }
+        ]
+      },
       "options": {
-        "showTime": true,
-        "showLabels": true,
-        "wrapLogMessage": true,
-        "enableLogDetails": true,
-        "sortOrder": "Descending",
-        "dedupStrategy": "none"
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "시간" }],
+        "cellHeight": "sm",
+        "footer": { "show": true, "countRows": true, "reducer": ["count"] }
       }
     },
     {
       "title": "All Logs",
-      "type": "logs",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 34 },
+      "type": "table",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 34 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "{service=~\"$service\"} | json",
+          "expr": "{service=~\"$service\"} | json | __error__=\"\"",
           "queryType": "range",
           "refId": "A"
         }
       ],
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": { "source": "labels", "format": "auto" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "id": true, "tsNs": true, "labels": true, "Line": true, "line": true,
+              "__error__": true, "__error_details__": true,
+              "event_extracted": true, "level_extracted": true, "logger_name": true
+            },
+            "indexByName": {
+              "Time": 0, "service": 1, "level": 2, "event": 3, "agent": 4,
+              "duration_ms": 5, "response_length": 6, "status": 7,
+              "error": 8, "response_preview": 9
+            },
+            "renameByName": {
+              "Time": "시간", "service": "서비스", "level": "레벨", "event": "이벤트",
+              "agent": "에이전트", "duration_ms": "소요시간(ms)", "response_length": "응답크기",
+              "status": "상태", "error": "에러", "response_preview": "응답 미리보기"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true, "inspect": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "레벨" },
+            "properties": [
+              { "id": "custom.width", "value": 80 },
+              { "id": "mappings", "value": [
+                { "type": "value", "options": { "error": { "text": "ERROR", "color": "red" } } },
+                { "type": "value", "options": { "warning": { "text": "WARN", "color": "yellow" } } },
+                { "type": "value", "options": { "info": { "text": "INFO", "color": "green" } } }
+              ]},
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "소요시간(ms)" },
+            "properties": [
+              { "id": "unit", "value": "ms" }, { "id": "custom.width", "value": 120 },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null }, { "color": "yellow", "value": 30000 }, { "color": "red", "value": 60000 }
+              ]}},
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "응답크기" },
+            "properties": [{ "id": "unit", "value": "decbytes" }, { "id": "custom.width", "value": 100 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "시간" },
+            "properties": [{ "id": "custom.width", "value": 170 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "이벤트" },
+            "properties": [{ "id": "custom.width", "value": 160 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "서비스" },
+            "properties": [{ "id": "custom.width", "value": 140 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "응답 미리보기" },
+            "properties": [{ "id": "custom.width", "value": 300 }]
+          }
+        ]
+      },
       "options": {
-        "showTime": true,
-        "showLabels": true,
-        "wrapLogMessage": true,
-        "enableLogDetails": true,
-        "sortOrder": "Descending",
-        "dedupStrategy": "none"
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "시간" }],
+        "cellHeight": "sm",
+        "footer": { "show": true, "countRows": true, "reducer": ["count"] }
       }
     }
   ],
