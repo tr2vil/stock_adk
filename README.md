@@ -68,6 +68,16 @@ trading-system/
 ├── monitoring/                # 모니터링
 │   ├── dashboard.py           # Streamlit 대시보드
 │   └── alerting.py            # Telegram/Slack 알림
+├── frontend/                  # Frontend (React + Vite + Bootstrap)
+│   ├── src/
+│   │   ├── main.jsx           # 진입점
+│   │   ├── App.jsx            # 라우터 설정
+│   │   ├── services/api.js    # Model: API 통신
+│   │   ├── hooks/             # Controller: 상태 관리 훅
+│   │   ├── pages/             # View: 페이지 컴포넌트
+│   │   └── components/        # 공유 컴포넌트
+│   ├── vite.config.js         # Vite + API 프록시 설정
+│   └── Dockerfile
 ├── docker/
 │   └── nginx/nginx.conf       # Nginx 리버스 프록시 설정
 ├── docker-compose.yml         # Docker Compose 설정
@@ -254,6 +264,35 @@ Orchestrator는 마크다운 형식으로 종합 분석 결과를 반환합니�
 - 수량: 10주, 목표가: $195.00, 손절가: $175.00
 ```
 
+## Frontend 웹 UI
+
+브라우저에서 종목 분석을 수행할 수 있는 웹 인터페이스를 제공합니다.
+
+### 주요 페이지
+
+| 경로 | 페이지 | 설명 |
+|------|--------|------|
+| `/` | 대시보드 | 시스템 개요 |
+| `/ai-assistant` | AI 비서 | A2A 프로토콜 기반 대화형 분석 |
+| `/stock-analysis` | 종목 분석 | 종목코드 + 마켓 입력 → 종합 분석 결과 (마크다운) |
+| `/portfolio` | 포트폴리오 | 준비중 |
+
+### 종목 분석 사용법
+
+1. http://localhost:5173/stock-analysis 접속
+2. 종목코드 입력 (예: `AAPL`, `삼성전자`)
+3. 마켓 선택 (US / KR)
+4. "분석 시작" 버튼 클릭
+5. 5개 에이전트 분석 완료 후 마크다운 결과 표시 (30초~2분 소요)
+
+### Frontend 아키텍처 (MVC)
+
+```
+services/api.js            → Model:      Orchestrator API 통신
+hooks/useStockAnalysis.js  → Controller: 폼 상태 + 분석 로직
+pages/StockAnalysis.jsx    → View:       렌더링 (react-markdown)
+```
+
 ## 에이전트별 테스트 예시
 
 ### News Agent (8001)
@@ -296,7 +335,7 @@ python test_agent.py 8005 "10만달러로 NVDA 포지션 사이징해줘"
 ### 전체 시스템
 
 ```bash
-# 빌드 및 실행
+# 빌드 및 실행 (Backend + Frontend 전체)
 docker compose up --build
 
 # 백그라운드 실행
@@ -306,10 +345,13 @@ docker compose up -d --build
 docker compose up --build orchestrator
 ```
 
+기동 후 http://localhost:5173 에서 웹 UI에 접속할 수 있습니다.
+
 ### 서비스 URL
 
 | 서비스 | URL | 설명 |
 |--------|-----|------|
+| **Frontend** | **http://localhost:5173** | **웹 UI (종목 분석, AI 비서)** |
 | Nginx | http://localhost | 리버스 프록시 |
 | Orchestrator API | http://localhost/api/ | REST API |
 | Orchestrator ADK | http://localhost/adk/ | A2A 엔드포인트 |
@@ -365,6 +407,7 @@ curl -X POST http://localhost/agents/technical/ \
 | Protocol | A2A (Agent-to-Agent) JSON-RPC 2.0 |
 | Financial Data | yfinance, 네이버 뉴스, Google News RSS |
 | Backend | FastAPI, Python 3.12+ |
+| Frontend | React 18, Vite, Bootstrap 5, react-markdown |
 | Database | PostgreSQL, Redis |
 | Infra | Docker, Docker Compose, Nginx |
 | Monitoring | Grafana, Streamlit |

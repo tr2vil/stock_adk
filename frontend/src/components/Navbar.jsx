@@ -57,9 +57,9 @@ const Navbar = () => {
                             <span className="badge bg-success me-1">Backend Online</span>
                             <span className="badge bg-primary">Gemini 2.5 Flash</span>
                         </div>
-                        <button className="btn btn-outline-light btn-sm">
+                        <NavLink to="/settings" className="btn btn-outline-light btn-sm">
                             <Settings size={18} />
-                        </button>
+                        </NavLink>
                     </div>
                 </div>
             </div>

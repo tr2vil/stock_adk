@@ -23,13 +23,17 @@ if _google_key and _google_key.strip().startswith("{"):
 from google.adk.agents import Agent
 from .prompt import AGENT_INSTRUCTION
 from .tools import lookup_ticker, analyze_technical, detect_patterns
+from shared.redis_client import seed_defaults, get_prompt_safe
 
 MODEL = os.getenv("TECHNICAL_AGENT_MODEL", "gemini-2.5-flash")
+
+seed_defaults({"prompt:technical_agent": AGENT_INSTRUCTION})
+_instruction = get_prompt_safe("technical_agent", AGENT_INSTRUCTION)
 
 root_agent = Agent(
     name="technical_agent",
     model=MODEL,
     description="차트 기술적 분석 및 패턴 인식 에이전트",
-    instruction=AGENT_INSTRUCTION,
+    instruction=_instruction,
     tools=[lookup_ticker, analyze_technical, detect_patterns],
 )

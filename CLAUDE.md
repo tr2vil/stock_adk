@@ -56,6 +56,23 @@ trading-system/
 │   ├── __init__.py
 │   ├── dashboard.py           # Streamlit
 │   └── alerting.py            # Telegram/Slack
+├── frontend/                  # Frontend (React + Vite)
+│   ├── src/
+│   │   ├── main.jsx           # 진입점
+│   │   ├── App.jsx            # 라우터 설정
+│   │   ├── services/
+│   │   │   └── api.js         # Model: API 통신 (axios)
+│   │   ├── hooks/
+│   │   │   └── useStockAnalysis.js  # Controller: 상태 관리
+│   │   ├── pages/
+│   │   │   ├── Dashboard.jsx         # 대시보드
+│   │   │   ├── AIAssistant.jsx       # AI 비서 (A2A 채팅)
+│   │   │   └── StockAnalysis.jsx     # View: 종목 분석 페이지
+│   │   └── components/
+│   │       └── Navbar.jsx     # 네비게이션 바
+│   ├── vite.config.js         # Vite 설정 + API 프록시
+│   ├── package.json
+│   └── Dockerfile
 ├── tests/                     # 테스트
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -307,7 +324,7 @@ Invoke-RestMethod -Uri "http://localhost:8000/adk/" -Method Post -Body ([System.
 |------------|--------|------|
 | `/api/health` | GET | Health check |
 | `/api/agents` | GET | Sub-agent 목록 |
-| `/api/analyze` | POST | 분석 요청 (stub) |
+| `/api/analyze` | POST | **종목 분석 요청 (InMemoryRunner)** |
 | `/adk/` | POST | **A2A 종합 분석 (JSON-RPC 2.0)** |
 | `/adk/.well-known/agent.json` | GET | Orchestrator Agent Card |
 
@@ -558,6 +575,64 @@ curl -X POST http://localhost/agents/technical/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"Analyze NVDA technicals"}]}}}'
 ```
+
+---
+
+## Frontend (React + Vite)
+
+### 아키텍처 (MVC 패턴)
+
+```
+Model (데이터)         → services/api.js          axios HTTP 통신
+Controller (상태/로직) → hooks/useStockAnalysis.js  useState + useCallback
+View (렌더링)          → pages/StockAnalysis.jsx   JSX + react-markdown
+```
+
+### 페이지 구성
+
+| 경로 | 컴포넌트 | 설명 |
+|------|----------|------|
+| `/` | `Dashboard` | 대시보드 |
+| `/ai-assistant` | `AIAssistant` | AI 비서 (A2A 채팅) |
+| `/stock-analysis` | `StockAnalysis` | 종목 분석 (종목코드 + 마켓 입력 → 마크다운 결과) |
+| `/portfolio` | - | 포트폴리오 (준비중) |
+
+### API 프록시 (CORS 해결)
+
+Vite dev server가 `/api` 요청을 Orchestrator로 프록시합니다:
+
+```
+브라우저 → localhost:5173/api/analyze → (Vite proxy) → orchestrator:8000/api/analyze
+```
+
+`vite.config.js`:
+```javascript
+proxy: {
+    '/api': { target: 'http://orchestrator:8000', changeOrigin: true }
+}
+```
+
+### Docker 실행
+
+Frontend는 `docker compose up --build`로 전체 시스템과 함께 기동됩니다.
+별도 실행 불필요 (docker-compose.yml에 frontend 서비스 포함).
+
+```bash
+# 전체 시스템 (Backend + Frontend)
+docker compose up --build
+
+# Frontend 접속
+http://localhost:5173
+```
+
+### Frontend 의존성
+
+- `react`, `react-dom` 18.x
+- `react-router-dom` 6.x (클라이언트 라우팅)
+- `axios` (HTTP 클라이언트)
+- `react-markdown` + `remark-gfm` (마크다운 렌더링)
+- `bootstrap` 5.x (UI 프레임워크)
+- `lucide-react` (아이콘)
 
 ---
 

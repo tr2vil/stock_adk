@@ -51,6 +51,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8001:8001"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -72,6 +74,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8002:8002"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -93,6 +97,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8003:8003"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -114,6 +120,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8004:8004"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped
@@ -135,6 +143,8 @@ services:
       - ./shared:/app/shared
     ports:
       - "8005:8005"
+    depends_on:
+      - redis
     networks:
       - trading_network
     restart: unless-stopped

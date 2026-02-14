@@ -28,13 +28,17 @@ from .tools import (
     analyze_institutional_flow,
     check_insider_trading,
 )
+from shared.redis_client import seed_defaults, get_prompt_safe
 
 MODEL = os.getenv("EXPERT_AGENT_MODEL", "gemini-2.5-flash")
+
+seed_defaults({"prompt:expert_agent": AGENT_INSTRUCTION})
+_instruction = get_prompt_safe("expert_agent", AGENT_INSTRUCTION)
 
 root_agent = Agent(
     name="expert_agent",
     model=MODEL,
     description="애널리스트 리포트 및 기관/외국인 수급 분석 에이전트",
-    instruction=AGENT_INSTRUCTION,
+    instruction=_instruction,
     tools=[lookup_ticker, collect_analyst_ratings, analyze_institutional_flow, check_insider_trading],
 )
