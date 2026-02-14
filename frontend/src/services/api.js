@@ -10,6 +10,9 @@ const api = axios.create({
 export const analyzeStock = (ticker, market) =>
     api.post('/api/analyze', { ticker, market }).then(res => res.data);
 
+export const resolveTicker = (query) =>
+    api.post('/api/resolve-ticker', { query }).then(res => res.data);
+
 export const healthCheck = () =>
     api.get('/api/health').then(res => res.data);
 

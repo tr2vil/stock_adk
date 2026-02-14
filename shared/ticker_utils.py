@@ -200,6 +200,28 @@ def lookup_kr_ticker(company_name: str) -> str | None:
     return None
 
 
+def _clean_query(query: str) -> str:
+    """입력에서 한국어 동사/조사 등 불필요한 접미사를 제거합니다."""
+    cleaned = query.strip()
+    # 한국어 동작어/접미사 제거 (뒤에서부터)
+    suffixes = [
+        "분석해줘", "분석해주세요", "분석해", "분석하기", "분석",
+        "알려줘", "알려주세요", "조회해줘", "조회해", "조회",
+        "검색해줘", "검색해", "검색", "찾아줘", "찾아",
+        "보여줘", "보여주세요",
+    ]
+    for suffix in suffixes:
+        if cleaned.endswith(suffix):
+            cleaned = cleaned[:-len(suffix)].strip()
+            break
+    return cleaned
+
+
+# 대소문자 무시 매핑 (영문자 포함 한국 종목명 대응: sk하이닉스 → SK하이닉스)
+_US_NAME_MAP_LOWER = {k.lower(): v for k, v in _US_NAME_MAP.items()}
+_KR_NAME_MAP_LOWER = {k.lower(): k for k, v in _KR_NAME_MAP.items()}
+
+
 def lookup_ticker(query: str) -> dict:
     """종목명 또는 티커를 조회하여 정확한 티커 정보를 반환합니다.
 
@@ -212,7 +234,7 @@ def lookup_ticker(query: str) -> dict:
     Returns:
         dict: 조회 결과. ticker, market, company_name, status 포함.
     """
-    cleaned = query.strip()
+    cleaned = _clean_query(query)
 
     # 1. 이미 yfinance 한국 티커 형식인 경우
     if re.match(r"^\d{6}\.(KS|KQ)$", cleaned):
@@ -272,9 +294,10 @@ def lookup_ticker(query: str) -> dict:
         except Exception:
             pass
 
-    # 4. 한글 미국 종목명 확인
-    if cleaned in _US_NAME_MAP:
-        ticker = _US_NAME_MAP[cleaned]
+    # 4. 한글 미국 종목명 확인 (대소문자 무시)
+    us_ticker = _US_NAME_MAP.get(cleaned) or _US_NAME_MAP_LOWER.get(cleaned.lower())
+    if us_ticker:
+        ticker = us_ticker
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
@@ -287,8 +310,10 @@ def lookup_ticker(query: str) -> dict:
         except Exception:
             return {"status": "success", "ticker": ticker, "market": "US", "company_name": cleaned}
 
-    # 5. 한글 한국 종목명 확인
-    if cleaned in _KR_NAME_MAP:
+    # 5. 한글 한국 종목명 확인 (대소문자 무시)
+    canonical = _KR_NAME_MAP_LOWER.get(cleaned.lower())
+    if canonical or cleaned in _KR_NAME_MAP:
+        cleaned = canonical or cleaned
         kr_ticker = lookup_kr_ticker(cleaned)
         if kr_ticker:
             try:

@@ -16,6 +16,9 @@ logger = get_logger("orchestrator.tools")
 # Per-agent call timeout (seconds)
 AGENT_CALL_TIMEOUT = float(os.getenv("AGENT_CALL_TIMEOUT", "90"))
 
+# Max retries per agent on failure (excludes connection refused)
+AGENT_MAX_RETRIES = int(os.getenv("AGENT_MAX_RETRIES", "1"))
+
 # Max response text length per agent (to keep total under 15KB)
 MAX_RESPONSE_LENGTH = 3000
 
@@ -109,47 +112,58 @@ async def _call_single_agent(
     url: str,
     message: str,
 ) -> dict:
-    """단일 sub-agent에게 A2A JSON-RPC 요청을 보냅니다."""
-    logger.info("agent_call_start", agent=agent_name, url=url)
-    try:
-        payload = _build_a2a_request(message)
-        response = await client.post(url, json=payload, timeout=AGENT_CALL_TIMEOUT)
-        response.raise_for_status()
-        resp_json = response.json()
+    """단일 sub-agent에게 A2A JSON-RPC 요청을 보냅니다. 실패 시 자동 재시도합니다."""
+    last_error = ""
 
-        if "error" in resp_json:
-            error_msg = str(resp_json["error"])
-            logger.warning("agent_rpc_error", agent=agent_name, error=error_msg)
-            return {"status": "error", "agent": agent_name, "error": error_msg}
+    for attempt in range(1 + AGENT_MAX_RETRIES):
+        if attempt > 0:
+            logger.info("agent_call_retry", agent=agent_name, attempt=attempt)
+            await asyncio.sleep(2 * attempt)  # backoff: 2s, 4s, ...
 
-        text = _extract_response_text(resp_json)
-        if not text:
-            logger.warning("agent_empty_response", agent=agent_name)
-            return {"status": "error", "agent": agent_name, "error": "Empty response"}
+        logger.info("agent_call_start", agent=agent_name, url=url, attempt=attempt)
+        try:
+            payload = _build_a2a_request(message)
+            response = await client.post(url, json=payload, timeout=AGENT_CALL_TIMEOUT)
+            response.raise_for_status()
+            resp_json = response.json()
 
-        if len(text) > MAX_RESPONSE_LENGTH:
-            text = text[:MAX_RESPONSE_LENGTH] + "\n... (truncated)"
+            if "error" in resp_json:
+                last_error = str(resp_json["error"])
+                logger.warning("agent_rpc_error", agent=agent_name, error=last_error, attempt=attempt)
+                continue  # retry
 
-        logger.info("agent_call_success", agent=agent_name, response_length=len(text))
-        return {"status": "success", "agent": agent_name, "analysis": text}
+            text = _extract_response_text(resp_json)
+            if not text:
+                last_error = "Empty response"
+                logger.warning("agent_empty_response", agent=agent_name, attempt=attempt)
+                continue  # retry
 
-    except httpx.TimeoutException:
-        logger.error("agent_call_timeout", agent=agent_name, timeout=AGENT_CALL_TIMEOUT)
-        return {
-            "status": "error",
-            "agent": agent_name,
-            "error": f"Timeout after {AGENT_CALL_TIMEOUT}s",
-        }
-    except httpx.ConnectError:
-        logger.error("agent_call_connect_error", agent=agent_name, url=url)
-        return {
-            "status": "error",
-            "agent": agent_name,
-            "error": f"Connection refused: {url}",
-        }
-    except Exception as e:
-        logger.error("agent_call_error", agent=agent_name, error=str(e))
-        return {"status": "error", "agent": agent_name, "error": str(e)}
+            if len(text) > MAX_RESPONSE_LENGTH:
+                text = text[:MAX_RESPONSE_LENGTH] + "\n... (truncated)"
+
+            logger.info("agent_call_success", agent=agent_name, response_length=len(text), attempt=attempt)
+            return {"status": "success", "agent": agent_name, "analysis": text}
+
+        except httpx.ConnectError:
+            # Connection refused — agent is not running, no point retrying
+            logger.error("agent_call_connect_error", agent=agent_name, url=url)
+            return {
+                "status": "error",
+                "agent": agent_name,
+                "error": f"Connection refused: {url}",
+            }
+        except httpx.TimeoutException:
+            last_error = f"Timeout after {AGENT_CALL_TIMEOUT}s"
+            logger.error("agent_call_timeout", agent=agent_name, timeout=AGENT_CALL_TIMEOUT, attempt=attempt)
+            continue  # retry
+        except Exception as e:
+            last_error = str(e)
+            logger.error("agent_call_error", agent=agent_name, error=last_error, attempt=attempt)
+            continue  # retry
+
+    # All attempts exhausted
+    logger.error("agent_call_failed_all_retries", agent=agent_name, retries=AGENT_MAX_RETRIES, last_error=last_error)
+    return {"status": "error", "agent": agent_name, "error": last_error}
 
 
 async def analyze_all_agents(ticker: str, market: str) -> dict:

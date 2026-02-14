@@ -83,6 +83,11 @@ class AnalysisRequest(BaseModel):
     market: str = "US"
 
 
+class ResolveTickerRequest(BaseModel):
+    """종목 조회 요청"""
+    query: str
+
+
 class HealthResponse(BaseModel):
     """Health check response"""
     status: str
@@ -172,6 +177,17 @@ async def _notify_agent_reload(agent_name: str) -> None:
 async def health_check():
     """Health check endpoint."""
     return HealthResponse(status="healthy", version="0.1.0")
+
+
+@app.post("/api/resolve-ticker")
+async def resolve_ticker(request: ResolveTickerRequest):
+    """종목명/티커를 검색하여 정확한 티커와 마켓을 반환합니다."""
+    from shared.ticker_utils import lookup_ticker
+
+    result = lookup_ticker(request.query)
+    if result.get("status") == "error":
+        raise HTTPException(404, result.get("error", "종목을 찾을 수 없습니다"))
+    return result
 
 
 @app.post("/api/analyze")

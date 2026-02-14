@@ -93,3 +93,92 @@
 .resultBody li {
     margin-bottom: 0.25rem;
 }
+
+/* Recent Searches */
+.recentSection {
+    border-radius: 12px;
+}
+
+.recentHeader {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 12px 12px 0 0;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+.recentList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.recentItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.recentItem:hover {
+    background-color: #f0f4ff;
+}
+
+.recentInfo {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.recentName {
+    font-weight: 500;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recentTicker {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-left: 0.35rem;
+    flex-shrink: 0;
+}
+
+.recentMeta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    margin-left: 1rem;
+}
+
+.recentTime {
+    color: #adb5bd;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.recentRemove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: #adb5bd;
+    padding: 0.2rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s;
+}
+
+.recentRemove:hover {
+    color: #dc3545;
+    background-color: #fee2e2;
+}

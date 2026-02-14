@@ -1,7 +1,7 @@
-import React from 'react';
+import { useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Search, Loader2, AlertCircle, RefreshCw, TrendingUp, TrendingDown, Minus, Clock } from 'lucide-react';
+import { Search, Loader2, AlertCircle, RefreshCw, TrendingUp, TrendingDown, Minus, Clock, X } from 'lucide-react';
 import useStockAnalysis from '../hooks/useStockAnalysis';
 import styles from './StockAnalysis.module.css';
 
@@ -11,6 +11,17 @@ const extractAction = (markdown) => {
     if (!markdown) return null;
     const match = markdown.match(/\*\*Action\*\*:\s*(BUY|SELL|HOLD)/i);
     return match ? match[1].toUpperCase() : null;
+};
+
+const timeAgo = (timestamp) => {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) return '방금 전';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}분 전`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}시간 전`;
+    const days = Math.floor(hours / 24);
+    return `${days}일 전`;
 };
 
 const ActionBadge = ({ action }) => {
@@ -29,7 +40,7 @@ const ActionBadge = ({ action }) => {
     );
 };
 
-const AnalysisForm = ({ ticker, setTicker, market, setMarket, isLoading, onSubmit }) => (
+const AnalysisForm = ({ query, setQuery, isLoading, onSubmit, resolved }) => (
     <div className={`card shadow-sm mb-4 ${styles.formCard}`}>
         <div className="card-body">
             <form onSubmit={onSubmit} className="d-flex align-items-end gap-3">
@@ -38,28 +49,16 @@ const AnalysisForm = ({ ticker, setTicker, market, setMarket, isLoading, onSubmi
                     <input
                         type="text"
                         className="form-control form-control-lg"
-                        value={ticker}
-                        onChange={(e) => setTicker(e.target.value)}
-                        placeholder="예: AAPL, 삼성전자, 005930"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="예: AAPL, 테슬라, 삼성전자, 005930"
                         disabled={isLoading}
                     />
-                </div>
-                <div style={{ width: '140px' }}>
-                    <label className="form-label fw-semibold">시장</label>
-                    <select
-                        className="form-select form-select-lg"
-                        value={market}
-                        onChange={(e) => setMarket(e.target.value)}
-                        disabled={isLoading}
-                    >
-                        <option value="US">US (미국)</option>
-                        <option value="KR">KR (한국)</option>
-                    </select>
                 </div>
                 <button
                     type="submit"
                     className="btn btn-primary btn-lg"
-                    disabled={!ticker.trim() || isLoading}
+                    disabled={!query.trim() || isLoading}
                 >
                     {isLoading
                         ? <Loader2 size={20} className={styles.spinner} />
@@ -68,6 +67,65 @@ const AnalysisForm = ({ ticker, setTicker, market, setMarket, isLoading, onSubmi
                     <span className="ms-2">분석</span>
                 </button>
             </form>
+            {resolved && (
+                <div className="mt-2">
+                    <span className="badge bg-info me-1">{resolved.market}</span>
+                    <span className="text-muted small">
+                        {resolved.company_name} ({resolved.ticker})
+                    </span>
+                </div>
+            )}
+        </div>
+    </div>
+);
+
+const RecentSearches = ({ history, onSelect, onRemove }) => {
+    if (!history.length) return null;
+
+    return (
+        <div className={`card shadow-sm mb-4 ${styles.recentSection}`}>
+            <div className={styles.recentHeader}>
+                <Clock size={16} className="me-1" />
+                <span className="fw-semibold">최근 검색</span>
+            </div>
+            <div className="card-body p-3">
+                <div className={styles.recentList}>
+                    {history.map((item) => (
+                        <div
+                            key={item.ticker}
+                            className={styles.recentItem}
+                            onClick={() => onSelect(item)}
+                        >
+                            <div className={styles.recentInfo}>
+                                <span className={`badge ${item.market === 'KR' ? 'bg-primary' : 'bg-dark'} me-2`}>
+                                    {item.market}
+                                </span>
+                                <span className={styles.recentName}>{item.company_name}</span>
+                                <span className={styles.recentTicker}>({item.ticker})</span>
+                            </div>
+                            <div className={styles.recentMeta}>
+                                <span className={styles.recentTime}>{timeAgo(item.timestamp)}</span>
+                                <button
+                                    className={styles.recentRemove}
+                                    onClick={(e) => { e.stopPropagation(); onRemove(item.ticker); }}
+                                    title="삭제"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ResolvingIndicator = () => (
+    <div className={`card shadow-sm ${styles.loadingCard}`}>
+        <div className="card-body text-center py-4">
+            <Loader2 size={32} className={`text-primary ${styles.spinner}`} />
+            <h6 className="mt-3 mb-0">종목을 검색하고 있습니다...</h6>
         </div>
     </div>
 );
@@ -131,9 +189,10 @@ const AnalysisResult = ({ result, onReset }) => {
 
 const StockAnalysis = () => {
     const {
-        ticker, setTicker,
-        market, setMarket,
+        query, setQuery,
+        resolved,
         status, result, error, elapsedSeconds,
+        history, removeHistory,
         analyze, reset,
     } = useStockAnalysis();
 
@@ -141,6 +200,16 @@ const StockAnalysis = () => {
         e.preventDefault();
         analyze();
     };
+
+    const handleSelectHistory = useCallback((item) => {
+        setQuery(item.query);
+        // Use setTimeout to let setQuery update before analyze reads it
+        setTimeout(() => {
+            setQuery(item.query);
+        }, 0);
+    }, [setQuery]);
+
+    const isLoading = status === 'resolving' || status === 'loading';
 
     return (
         <div className="container-fluid px-4 py-3">
@@ -150,14 +219,22 @@ const StockAnalysis = () => {
             </div>
 
             <AnalysisForm
-                ticker={ticker}
-                setTicker={setTicker}
-                market={market}
-                setMarket={setMarket}
-                isLoading={status === 'loading'}
+                query={query}
+                setQuery={setQuery}
+                isLoading={isLoading}
                 onSubmit={handleSubmit}
+                resolved={resolved}
             />
 
+            {status === 'idle' && (
+                <RecentSearches
+                    history={history}
+                    onSelect={handleSelectHistory}
+                    onRemove={removeHistory}
+                />
+            )}
+
+            {status === 'resolving' && <ResolvingIndicator />}
             {status === 'loading' && <LoadingIndicator elapsedSeconds={elapsedSeconds} />}
             {status === 'error' && <ErrorAlert error={error} onRetry={analyze} />}
             {status === 'success' && result && <AnalysisResult result={result} onReset={reset} />}
