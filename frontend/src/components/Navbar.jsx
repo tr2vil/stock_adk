@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, MessageSquare, Briefcase, BarChart3, Settings } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Briefcase, BarChart3, Settings, Search } from 'lucide-react';
 import styles from './Navbar.module.css';
 
 const Navbar = () => {
@@ -32,6 +32,14 @@ const Navbar = () => {
                                 to="/ai-assistant"
                             >
                                 <MessageSquare size={18} className="me-1" /> AI 비서 (A2UI)
+                            </NavLink>
+                        </li>
+                        <li className="nav-item">
+                            <NavLink
+                                className={({ isActive }) => `nav-link d-flex align-items-center ${styles.navLink} ${isActive ? styles.activeLink : ''}`}
+                                to="/stock-analysis"
+                            >
+                                <Search size={18} className="me-1" /> 종목 분석
                             </NavLink>
                         </li>
                         <li className="nav-item">

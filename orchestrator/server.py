@@ -6,6 +6,8 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="google.adk")
 
 import os
+import time
+import uuid
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
@@ -16,8 +18,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from shared.middleware import A2ALoggingMiddleware
+from google.adk.runners import InMemoryRunner
+from google.genai import types
+
 from .agent import root_agent
 from .scheduler import start_scheduler, stop_scheduler
+
+# InMemoryRunner for REST API analysis
+_runner = InMemoryRunner(agent=root_agent, app_name="stock_analysis")
 
 # ADK sub-app startup handlers (populated below, executed in lifespan)
 _adk_startup_handlers = []
@@ -84,14 +92,44 @@ async def analyze_stock(request: AnalysisRequest):
     종목 분석 요청 엔드포인트.
 
     Orchestrator agent를 통해 전체 분석 파이프라인을 실행합니다.
-    현재는 stub 구현이며, 실제 분석은 ADK API를 통해 수행됩니다.
+    InMemoryRunner로 ADK Agent를 실행하고 최종 응답을 반환합니다.
     """
-    # TODO: ADK Runner를 사용한 실제 분석 구현
+    start = time.monotonic()
+    prompt = f"{request.ticker} {request.market} market 주식 분석해줘"
+    user_id = f"web_{uuid.uuid4().hex[:8]}"
+
+    user_message = types.Content(
+        role="user",
+        parts=[types.Part(text=prompt)],
+    )
+
+    # InMemoryRunner requires an existing session — create one first
+    session = await _runner.session_service.create_session(
+        app_name=_runner.app_name,
+        user_id=user_id,
+    )
+
+    final_text = ""
+    async for event in _runner.run_async(
+        user_id=user_id,
+        session_id=session.id,
+        new_message=user_message,
+    ):
+        if event.is_final_response():
+            if event.content and event.content.parts:
+                final_text = event.content.parts[0].text
+
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+
+    if not final_text:
+        raise HTTPException(status_code=500, detail="분석 결과가 비어있습니다")
+
     return {
-        "status": "received",
+        "status": "success",
         "ticker": request.ticker,
         "market": request.market,
-        "message": "Use /adk endpoint for full analysis via ADK API",
+        "result": final_text,
+        "elapsed_ms": elapsed_ms,
     }
 
 

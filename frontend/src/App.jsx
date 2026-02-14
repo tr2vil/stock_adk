@@ -7,6 +7,7 @@ import './App.css';
 
 import Dashboard from './pages/Dashboard';
 import AIAssistant from './pages/AIAssistant';
+import StockAnalysis from './pages/StockAnalysis';
 
 function App() {
     return (
@@ -17,6 +18,7 @@ function App() {
                     <Routes>
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/ai-assistant" element={<AIAssistant />} />
+                        <Route path="/stock-analysis" element={<StockAnalysis />} />
                         <Route path="/portfolio" element={<div className="container mt-4"><h2>포트폴리오</h2><p>준비중입니다.</p></div>} />
                     </Routes>
                 </main>

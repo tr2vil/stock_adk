@@ -235,7 +235,7 @@ services:
     restart: unless-stopped
 
   # =============================================
-  # Frontend (Optional)
+  # Frontend
   # =============================================
   frontend:
     build:
@@ -246,8 +246,7 @@ services:
       - "5173:5173"
     networks:
       - trading_network
-    profiles:
-      - frontend
+    restart: unless-stopped
 
 networks:
   trading_network:
