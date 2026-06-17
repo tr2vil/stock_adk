@@ -65,6 +65,15 @@ position:{ticker}              : {core_qty, swing_qty, ...} # 토스 holdings에
 - 코어 보호(보유 ≥ core_qty), **지정가만**, 일일 거래 제한, 히스테리시스/쿨다운으로 밴드 thrash 방지.
 - 토스 IP 허용목록: 운영 시 시스템이 도는 호스트의 공인 IP 등록 필요.
 
+## Phase 2 확정 파라미터 (구현 대기)
+- **폴링**: 장중 **5분** 간격 (KR 09:00~15:30 KST). 워처는 **LLM 미사용** — 토스 `get_prices` REST + 사다리 평가는 결정론적.
+- **워처 시작**: **수동 토글**(전략 페이지 버튼 + start/stop API). 자동 시작 안 함(실주문 안전).
+- **거래**: `DRY_RUN=true` 페이퍼만. order_manager(지정가·일일한도·코어보호·멱등키) 경유.
+- **포지션 산정**: 매 틱 토스 보유 동기화 → `core_qty = floor(total × (1 - swing_fraction))`, 봇은 `swing_qty`만 거래(코어 밑 매도 금지).
+- **사다리 상태머신**: ARMED→FILLED, 매도 체결 후 하락 시 대응 매수단 재무장(히스테리시스/쿨다운으로 thrash 방지). 상태는 Redis 활성 플랜에 저장.
+- **통합 지점**: `orchestrator/scheduler.py`(APScheduler interval), `execution/order_manager.py`, `shared/strategy.py`.
+- **구현 방식**: 재시작 후 `/dev`로 진행 — `/strategy-builder`(상태머신·워처) + `/toss-execution`(주문) + `/runner`(검증) + `/reviewer`.
+
 ## 이미 구현된 것 (재사용)
 - **프롬프트 Redis + UI 편집**: `Settings.jsx` + `/api/prompts` (GET/PUT) — 6개 에이전트 프롬프트
   확인/수정 + 가중치/임계값 편집 **완성됨**. 추가 작업 불필요.
