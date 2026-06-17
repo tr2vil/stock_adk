@@ -208,6 +208,8 @@ class TossRESTClient:
         """
         last_error = ""
         for attempt in range(2):
+            if attempt > 0:
+                self.token = None  # 401/무효화 대비: 재시도 시 토큰 강제 재발급
             try:
                 resp = requests.get(
                     f"{self.base_url}/api/v1/holdings",
@@ -280,6 +282,8 @@ class TossRESTClient:
         # 토스 캔들 API는 간헐적으로 빈 응답을 줄 때가 있어 1회 재시도한다.
         last_error = ""
         for attempt in range(2):
+            if attempt > 0:
+                self.token = None  # 401/무효화 대비: 재시도 시 토큰 강제 재발급
             try:
                 resp = requests.get(
                     f"{self.base_url}/api/v1/candles",
