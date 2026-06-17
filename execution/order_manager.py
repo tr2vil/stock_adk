@@ -5,7 +5,7 @@ Based on TRADING_SYSTEM_SPEC.md Section 5.2
 import logging
 from shared.models import TradeDecision
 from shared.config import settings
-from .kiwoom_rest import KiwoomRESTClient
+from .toss_rest import TossRESTClient
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class OrderManager:
         Args:
             dry_run: True면 주문 미실행 (로그만). None이면 설정에서 가져옴.
         """
-        self.client = KiwoomRESTClient()
+        self.client = TossRESTClient()
         self.dry_run = dry_run if dry_run is not None else settings.DRY_RUN
         self.daily_trade_count = 0
         self.max_daily_trades = settings.MAX_DAILY_TRADES
