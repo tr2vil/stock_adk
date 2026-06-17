@@ -210,4 +210,6 @@ marimo/_lsp/
 # Docker
 docker/postgres/data/
 docker/grafana/data/
-.claude/
+# .claude: 프로젝트 스킬은 추적, 로컬 설정(settings.local.json 등)은 무시
+.claude/*
+!.claude/skills/
