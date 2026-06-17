@@ -24,6 +24,7 @@ from shared.redis_client import (
     aget_prompt, aset_prompt, aget_weights, aset_weights,
     aget_thresholds, aset_thresholds,
 )
+from shared import strategy as strat
 from shared.logger import get_logger
 from google.adk.runners import InMemoryRunner
 from google.genai import types
@@ -104,6 +105,31 @@ class ResolveTickerRequest(BaseModel):
 class ChatRequest(BaseModel):
     """AI 비서 채팅 요청"""
     message: str
+
+
+class WatchlistRequest(BaseModel):
+    """워치리스트 수정 요청"""
+    watchlist: list[dict]
+
+
+class BandConfigRequest(BaseModel):
+    """밴드 설정 수정 요청 (scope: '_default' 또는 종목코드)"""
+    scope: str
+    config: dict
+
+
+class StrategyAnalyzeRequest(BaseModel):
+    """전략 분석(기대값 제안) 요청"""
+    symbol: str
+    market: str = "KR"
+    name: str = ""
+
+
+class ApprovePlanRequest(BaseModel):
+    """제안 플랜 승인 요청 (사용자 수정값 선택적)"""
+    symbol: str
+    target_price: float | None = None
+    buy_anchor: float | None = None
 
 
 class HealthResponse(BaseModel):
@@ -406,6 +432,107 @@ async def update_thresholds(body: ThresholdsRequest):
     reload_decision_config()
     _logger.info("thresholds_updated", thresholds=body.thresholds)
     return {"status": "updated", "thresholds": body.thresholds}
+
+
+# ── 스윙 밴드 전략 (Phase 1: 토대) ──
+
+async def _run_agent_text(prompt: str) -> str:
+    """Orchestrator agent를 실행해 최종 텍스트를 반환 (analyze/chat과 동일 패턴)."""
+    user_id = f"strat_{uuid.uuid4().hex[:8]}"
+    msg = types.Content(role="user", parts=[types.Part(text=prompt)])
+    session = await _runner.session_service.create_session(
+        app_name=_runner.app_name, user_id=user_id,
+    )
+    final = ""
+    async for event in _runner.run_async(
+        user_id=user_id, session_id=session.id, new_message=msg,
+    ):
+        if event.is_final_response() and event.content and event.content.parts:
+            final = event.content.parts[0].text
+    return final
+
+
+@app.get("/api/watchlist")
+async def get_watchlist():
+    """워치리스트 조회."""
+    return {"watchlist": await strat.aget_watchlist()}
+
+
+@app.put("/api/watchlist")
+async def put_watchlist(body: WatchlistRequest):
+    """워치리스트 수정."""
+    await strat.aset_watchlist(body.watchlist)
+    return {"status": "updated", "watchlist": body.watchlist}
+
+
+@app.get("/api/strategy/config")
+async def get_strategy_config(symbol: str | None = None):
+    """밴드 설정 조회 (symbol 주면 전역 기본값+종목 오버라이드 병합)."""
+    return {"scope": symbol or "_default", "config": await strat.aget_band_config(symbol)}
+
+
+@app.put("/api/strategy/config")
+async def put_strategy_config(body: BandConfigRequest):
+    """밴드 설정 저장 (scope='_default' 또는 종목코드)."""
+    await strat.aset_band_config(body.scope, body.config)
+    return {"status": "updated", "scope": body.scope, "config": body.config}
+
+
+@app.get("/api/strategy/plans")
+async def get_strategy_plans():
+    """워치리스트 종목별 제안/활성 플랜 조회."""
+    return {"plans": await strat.aget_all_plans()}
+
+
+@app.post("/api/strategy/analyze")
+async def strategy_analyze(body: StrategyAnalyzeRequest):
+    """5-에이전트 분석 → 기대값/적정매수가 제안 (승인 대기 상태로 저장)."""
+    # 현재가 (토스)
+    current = 0.0
+    price_data = _toss.get_current_price_kr(body.symbol)
+    res = price_data.get("result") if isinstance(price_data, dict) else None
+    if res:
+        try:
+            current = float(res[0].get("lastPrice", 0))
+        except (ValueError, TypeError, IndexError):
+            current = 0.0
+
+    report = await _run_agent_text(f"{body.symbol} {body.market} market 주식 분석해줘")
+    if not report:
+        raise HTTPException(status_code=500, detail="분석 결과가 비어있습니다")
+
+    plan = strat.build_proposed_plan(
+        body.symbol, body.market, body.name or body.symbol, report, current,
+    )
+    plan["generated_at"] = int(time.time() * 1000)
+    await strat.aset_proposed_plan(body.symbol, plan)
+    _logger.info("strategy_proposed", symbol=body.symbol, target=plan["target_price"])
+    return {"status": "proposed", "plan": plan}
+
+
+@app.post("/api/strategy/approve")
+async def strategy_approve(body: ApprovePlanRequest):
+    """제안 플랜을 승인하여 활성화 (사용자 수정값 반영)."""
+    proposed = await strat.aget_proposed_plan(body.symbol)
+    if not proposed:
+        raise HTTPException(status_code=404, detail="제안된 플랜이 없습니다")
+    plan = dict(proposed)
+    if body.target_price is not None:
+        plan["target_price"] = body.target_price
+    if body.buy_anchor is not None:
+        plan["buy_anchor"] = body.buy_anchor
+    plan["source"] = "approved"
+    plan["approved_at"] = int(time.time() * 1000)
+    await strat.aset_active_plan(body.symbol, plan)
+    _logger.info("strategy_approved", symbol=body.symbol)
+    return {"status": "active", "plan": plan}
+
+
+@app.delete("/api/strategy/plans/{symbol}")
+async def strategy_deactivate(symbol: str):
+    """활성 플랜 비활성화."""
+    await strat.adelete_active_plan(symbol)
+    return {"status": "deleted", "symbol": symbol}
 
 
 # Mount ADK A2A server
