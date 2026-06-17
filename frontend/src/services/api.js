@@ -16,6 +16,13 @@ export const resolveTicker = (query) =>
 export const healthCheck = () =>
     api.get('/api/health').then(res => res.data);
 
+// 포트폴리오 (토스 보유종목 / 캔들차트)
+export const getHoldings = () =>
+    api.get('/api/holdings').then(res => res.data);
+
+export const getCandles = (symbol, count = 90, interval = '1d') =>
+    api.get(`/api/candles/${symbol}`, { params: { count, interval } }).then(res => res.data);
+
 // ── Prompt Management ──
 
 export const getPrompts = () =>
