@@ -138,6 +138,9 @@ celerybeat.pid
 .env
 .envrc
 .venv
+
+# Local-only compose port remapping (host port collisions)
+docker-compose.override.yml
 env/
 venv/
 ENV/

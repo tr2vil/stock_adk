@@ -4,6 +4,7 @@ google-adk[a2a]>=1.23
 # Web Framework
 uvicorn>=0.30.0
 fastapi>=0.115.0
+sse-starlette>=2.1.0  # a2a-sdk JSONRPCApplication(to_a2a) 필수 - 최신 google-adk가 transitively 미설치
 
 # Data & Analysis
 pandas>=2.2.0
@@ -12,6 +13,7 @@ yfinance>=0.2.40
 # LLM
 google-genai>=1.0.0
 google-cloud-aiplatform
+litellm>=1.40.0  # Anthropic Claude 등 비-Gemini 모델 사용 시 필요 (ADK LiteLlm)
 
 # Database
 sqlalchemy>=2.0.0

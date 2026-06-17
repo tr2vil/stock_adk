@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     GOOGLE_CLOUD_LOCATION: str = "us-central1"
     GOOGLE_KEY: str = ""
 
+    # ── Anthropic (LiteLLM 경유 Claude 모델용) ──
+    ANTHROPIC_API_KEY: str = ""
+
     # ── Agent Models ──
+    # Gemini: "gemini-2.5-flash" / "gemini-2.5-pro"
+    # Claude: "claude-opus-4-8" / "claude-sonnet-4-6" / "claude-haiku-4-5"
     NEWS_AGENT_MODEL: str = "gemini-2.5-flash"
     FUNDAMENTAL_AGENT_MODEL: str = "gemini-2.5-flash"
     TECHNICAL_AGENT_MODEL: str = "gemini-2.5-flash"
@@ -34,11 +39,10 @@ class Settings(BaseSettings):
     RISK_AGENT_HOST: str = "risk-agent"
     RISK_AGENT_PORT: int = 8005
 
-    # ── Kiwoom REST API ──
-    KIWOOM_APP_KEY: str = ""
-    KIWOOM_APP_SECRET: str = ""
-    KIWOOM_ACCOUNT_NO: str = ""
-    KIWOOM_IS_MOCK: bool = True
+    # ── Toss Securities Open API ──
+    TOSS_API_KEY: str = ""        # client_id (tsck_live_...)
+    TOSS_SECRET_KEY: str = ""     # client_secret (tssk_live_...)
+    TOSS_ACCOUNT_SEQ: str = ""    # X-Tossinvest-Account 헤더값. 비우면 /api/v1/accounts로 자동 조회
 
     # ── Database ──
     DATABASE_URL: str = "postgresql://trading:password@postgres:5432/trading"
