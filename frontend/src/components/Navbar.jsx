@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, BarChart3, Settings, Search } from 'lucide-react';
+import { LayoutDashboard, Briefcase, BarChart3, Settings, Search, Target } from 'lucide-react';
 import styles from './Navbar.module.css';
 
 const Navbar = () => {
@@ -40,6 +40,14 @@ const Navbar = () => {
                                 to="/portfolio"
                             >
                                 <Briefcase size={18} className="me-1" /> 포트폴리오
+                            </NavLink>
+                        </li>
+                        <li className="nav-item">
+                            <NavLink
+                                className={({ isActive }) => `nav-link d-flex align-items-center ${styles.navLink} ${isActive ? styles.activeLink : ''}`}
+                                to="/strategy"
+                            >
+                                <Target size={18} className="me-1" /> 전략
                             </NavLink>
                         </li>
                     </ul>

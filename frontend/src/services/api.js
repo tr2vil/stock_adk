@@ -23,6 +23,31 @@ export const getHoldings = () =>
 export const getCandles = (symbol, count = 90, interval = '1d') =>
     api.get(`/api/candles/${symbol}`, { params: { count, interval } }).then(res => res.data);
 
+// 스윙 밴드 전략 (Phase 1)
+export const getWatchlist = () =>
+    api.get('/api/watchlist').then(res => res.data);
+
+export const putWatchlist = (watchlist) =>
+    api.put('/api/watchlist', { watchlist }).then(res => res.data);
+
+export const getStrategyConfig = (symbol) =>
+    api.get('/api/strategy/config', { params: symbol ? { symbol } : {} }).then(res => res.data);
+
+export const putStrategyConfig = (scope, config) =>
+    api.put('/api/strategy/config', { scope, config }).then(res => res.data);
+
+export const getStrategyPlans = () =>
+    api.get('/api/strategy/plans').then(res => res.data);
+
+export const strategyAnalyze = (symbol, market, name) =>
+    api.post('/api/strategy/analyze', { symbol, market, name }).then(res => res.data);
+
+export const strategyApprove = (symbol, target_price, buy_anchor) =>
+    api.post('/api/strategy/approve', { symbol, target_price, buy_anchor }).then(res => res.data);
+
+export const strategyDeactivate = (symbol) =>
+    api.delete(`/api/strategy/plans/${symbol}`).then(res => res.data);
+
 // ── Prompt Management ──
 
 export const getPrompts = () =>
