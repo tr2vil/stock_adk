@@ -9,7 +9,7 @@ import os
 import re
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, AsyncExitStack
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,14 +31,20 @@ from google.genai import types
 from .agent import root_agent
 from .decision_engine import reload_config as reload_decision_config
 from .scheduler import start_scheduler, stop_scheduler
+from execution.toss_rest import TossRESTClient
 
 _logger = get_logger("orchestrator.server")
 
 # InMemoryRunner for REST API analysis
 _runner = InMemoryRunner(agent=root_agent, app_name="stock_analysis")
 
+# Toss client for holdings/candles (포트폴리오 화면)
+_toss = TossRESTClient()
+
 # ADK sub-app startup handlers (populated below, executed in lifespan)
+# 구버전 ADK: router.on_startup 리스트 / 신버전 ADK: lifespan 컨텍스트
 _adk_startup_handlers = []
+_adk_apps = []  # 마운트된 ADK 서브앱 (신버전 lifespan 실행용)
 
 
 # Lifespan handler for startup/shutdown
@@ -48,12 +54,19 @@ async def lifespan(app: FastAPI):
     # Startup: trigger ADK sub-app route registration
     # to_a2a() registers A2A routes in on_startup, but mounted sub-apps'
     # startup events are not called automatically by FastAPI's lifespan.
-    for handler in _adk_startup_handlers:
-        await handler()
-    # start_scheduler()  # Uncomment to enable scheduled analysis
-    yield
-    # Shutdown
-    stop_scheduler()
+    async with AsyncExitStack() as stack:
+        # 구버전 ADK: on_startup 핸들러 직접 호출
+        for handler in _adk_startup_handlers:
+            await handler()
+        # 신버전 ADK: 서브앱의 lifespan 컨텍스트를 진입시켜 초기화
+        for sub_app in _adk_apps:
+            await stack.enter_async_context(
+                sub_app.router.lifespan_context(sub_app)
+            )
+        # start_scheduler()  # Uncomment to enable scheduled analysis
+        yield
+        # Shutdown
+        stop_scheduler()
 
 
 app = FastAPI(
@@ -86,6 +99,11 @@ class AnalysisRequest(BaseModel):
 class ResolveTickerRequest(BaseModel):
     """종목 조회 요청"""
     query: str
+
+
+class ChatRequest(BaseModel):
+    """AI 비서 채팅 요청"""
+    message: str
 
 
 class HealthResponse(BaseModel):
@@ -237,6 +255,59 @@ async def analyze_stock(request: AnalysisRequest):
     }
 
 
+@app.post("/api/chat")
+async def chat(request: ChatRequest):
+    """AI 비서 채팅 엔드포인트.
+
+    자유 입력 메시지를 Orchestrator agent로 실행하고 텍스트 응답을 반환합니다.
+    프론트엔드(AIAssistant)는 응답의 `message` 필드를 렌더링합니다.
+    """
+    user_id = f"chat_{uuid.uuid4().hex[:8]}"
+    user_message = types.Content(role="user", parts=[types.Part(text=request.message)])
+
+    session = await _runner.session_service.create_session(
+        app_name=_runner.app_name,
+        user_id=user_id,
+    )
+
+    final_text = ""
+    async for event in _runner.run_async(
+        user_id=user_id,
+        session_id=session.id,
+        new_message=user_message,
+    ):
+        if event.is_final_response() and event.content and event.content.parts:
+            final_text = event.content.parts[0].text
+
+    if not final_text:
+        raise HTTPException(status_code=500, detail="응답이 비어있습니다")
+
+    return {"type": "text", "message": final_text}
+
+
+@app.get("/api/holdings")
+def get_holdings():
+    """토스 보유종목 조회 (포트폴리오 화면).
+
+    sync def → FastAPI가 스레드풀에서 실행하므로 blocking requests가
+    이벤트 루프를 막지 않는다.
+    """
+    data = _toss.get_balance()
+    if "error" in data:
+        raise HTTPException(status_code=502, detail=f"토스 보유종목 조회 실패: {data['error']}")
+    return data.get("result", data)
+
+
+@app.get("/api/candles/{symbol}")
+def get_candles(symbol: str, interval: str = "1d", count: int = 60):
+    """토스 캔들(차트) 데이터 조회 (포트폴리오 화면)."""
+    data = _toss.get_candles(symbol, interval=interval, count=count)
+    if "error" in data:
+        raise HTTPException(status_code=502, detail=f"토스 캔들 조회 실패: {data['error']}")
+    result = data.get("result", {})
+    return {"symbol": symbol, "interval": interval, "candles": result.get("candles", [])}
+
+
 @app.get("/api/agents")
 async def list_agents():
     """등록된 sub-agent 목록을 반환합니다."""
@@ -344,9 +415,11 @@ try:
     ORCHESTRATOR_PORT = int(os.getenv("ORCHESTRATOR_PORT", "8000"))
     adk_app = to_a2a(root_agent, port=ORCHESTRATOR_PORT)
 
-    # Capture startup handlers before mounting — FastAPI lifespan does not
-    # propagate on_startup to mounted sub-apps, so we trigger them manually.
-    _adk_startup_handlers.extend(adk_app.router.on_startup)
+    # FastAPI lifespan does not propagate to mounted sub-apps, so we trigger
+    # ADK 초기화를 직접 수행한다. 구버전은 on_startup 리스트, 신버전은
+    # lifespan 컨텍스트를 사용하므로 둘 다 처리한다.
+    _adk_startup_handlers.extend(getattr(adk_app.router, "on_startup", None) or [])
+    _adk_apps.append(adk_app)
 
     # Mount ADK app at /adk path
     app.mount("/adk", adk_app)
