@@ -24,6 +24,7 @@ from google.adk.agents import Agent
 from .prompt import AGENT_INSTRUCTION
 from .tools import fetch_korean_stock_news, fetch_us_stock_news
 from shared.redis_client import seed_defaults, get_prompt_safe
+from shared.model_factory import resolve_model
 
 MODEL = os.getenv("NEWS_AGENT_MODEL", "gemini-2.5-flash")
 
@@ -32,7 +33,7 @@ _instruction = get_prompt_safe("news_agent", AGENT_INSTRUCTION)
 
 root_agent = Agent(
     name="news_agent",
-    model=MODEL,
+    model=resolve_model(MODEL),
     description="종목 뉴스 수집 및 시황/센티먼트 분석 에이전트",
     instruction=_instruction,
     tools=[fetch_korean_stock_news, fetch_us_stock_news],

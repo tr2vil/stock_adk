@@ -24,6 +24,7 @@ from google.adk.agents import Agent
 from .prompt import AGENT_INSTRUCTION
 from .tools import lookup_ticker, calculate_position_size, assess_portfolio_risk
 from shared.redis_client import seed_defaults, get_prompt_safe
+from shared.model_factory import resolve_model
 
 MODEL = os.getenv("RISK_AGENT_MODEL", "gemini-2.5-flash")
 
@@ -32,7 +33,7 @@ _instruction = get_prompt_safe("risk_agent", AGENT_INSTRUCTION)
 
 root_agent = Agent(
     name="risk_agent",
-    model=MODEL,
+    model=resolve_model(MODEL),
     description="포지션 사이징 및 리스크 관리 에이전트",
     instruction=_instruction,
     tools=[lookup_ticker, calculate_position_size, assess_portfolio_risk],

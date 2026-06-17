@@ -24,6 +24,7 @@ from google.adk.agents import Agent
 from .prompt import ORCHESTRATOR_INSTRUCTION
 from .tools import analyze_all_agents
 from shared.redis_client import seed_defaults, get_prompt_safe
+from shared.model_factory import resolve_model
 
 MODEL = os.getenv("ORCHESTRATOR_MODEL", "gemini-2.5-pro")
 
@@ -33,7 +34,7 @@ _instruction = get_prompt_safe("orchestrator", ORCHESTRATOR_INSTRUCTION)
 
 root_agent = Agent(
     name="trading_orchestrator",
-    model=MODEL,
+    model=resolve_model(MODEL),
     description="주식 자동매매 시스템 오케스트레이터 - 5개 전문 에이전트를 동시에 조회하여 종합 분석 및 매매 결정",
     instruction=_instruction,
     tools=[analyze_all_agents],

@@ -24,6 +24,7 @@ from google.adk.agents import Agent
 from .prompt import AGENT_INSTRUCTION
 from .tools import lookup_ticker, analyze_technical, detect_patterns
 from shared.redis_client import seed_defaults, get_prompt_safe
+from shared.model_factory import resolve_model
 
 MODEL = os.getenv("TECHNICAL_AGENT_MODEL", "gemini-2.5-flash")
 
@@ -32,7 +33,7 @@ _instruction = get_prompt_safe("technical_agent", AGENT_INSTRUCTION)
 
 root_agent = Agent(
     name="technical_agent",
-    model=MODEL,
+    model=resolve_model(MODEL),
     description="차트 기술적 분석 및 패턴 인식 에이전트",
     instruction=_instruction,
     tools=[lookup_ticker, analyze_technical, detect_patterns],

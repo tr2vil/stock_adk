@@ -24,6 +24,7 @@ from google.adk.agents import Agent
 from .prompt import AGENT_INSTRUCTION
 from .tools import fetch_korean_financials, fetch_us_financials
 from shared.redis_client import seed_defaults, get_prompt_safe
+from shared.model_factory import resolve_model
 
 MODEL = os.getenv("FUNDAMENTAL_AGENT_MODEL", "gemini-2.5-flash")
 
@@ -32,7 +33,7 @@ _instruction = get_prompt_safe("fundamental_agent", AGENT_INSTRUCTION)
 
 root_agent = Agent(
     name="fundamental_agent",
-    model=MODEL,
+    model=resolve_model(MODEL),
     description="재무제표 분석 및 밸류에이션 평가 에이전트",
     instruction=_instruction,
     tools=[fetch_korean_financials, fetch_us_financials],
