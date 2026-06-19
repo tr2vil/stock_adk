@@ -1,6 +1,6 @@
 """
 Order Manager - 매매 의사결정을 실제 주문으로 변환하고 관리
-Based on TRADING_SYSTEM_SPEC.md Section 5.2
+Based on docs/TRADING_SYSTEM_SPEC.md Section 5.2
 """
 import logging
 from shared.models import TradeDecision

@@ -1,6 +1,6 @@
 """
 Shared Pydantic Data Models for Trading System.
-Based on TRADING_SYSTEM_SPEC.md Section 2.
+Based on docs/TRADING_SYSTEM_SPEC.md Section 2.
 """
 from pydantic import BaseModel, Field
 from enum import Enum

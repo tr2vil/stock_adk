@@ -54,17 +54,12 @@ dev = [
     "ruff>=0.5.0",
 ]
 
-monitoring = [
-    "streamlit>=1.37.0",
-    "python-telegram-bot>=21.0",
-]
-
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["orchestrator*", "sub_agents*", "shared*", "execution*", "monitoring*"]
+include = ["orchestrator*", "sub_agents*", "shared*", "execution*"]
 
 [tool.ruff]
 line-length = 100
@@ -77,3 +72,5 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# tests/manual/* 은 인자 기반 수동 CLI 스크립트(서버 필요) → 자동 수집 제외
+addopts = "--ignore=tests/manual"

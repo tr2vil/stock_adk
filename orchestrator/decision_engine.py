@@ -1,6 +1,6 @@
 """
 Decision Engine - 가중 합산 및 최종 판단 로직
-Based on TRADING_SYSTEM_SPEC.md Section 4.2
+Based on docs/TRADING_SYSTEM_SPEC.md Section 4.2
 """
 import json
 

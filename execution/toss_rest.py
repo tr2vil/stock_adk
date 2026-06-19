@@ -9,7 +9,7 @@ API 문서: https://developers.tossinvest.com/docs
 - 모든 숫자 필드는 문자열(string)
 - 실시간 시세(WebSocket) 미지원, REST only
 
-KiwoomRESTClient와 동일한 public 인터페이스를 유지하여 OrderManager 변경을 최소화한다.
+OrderManager가 기대하는 public 인터페이스를 그대로 유지하여 변경을 최소화한다.
 """
 import time
 import uuid
@@ -185,7 +185,7 @@ class TossRESTClient:
         """미국 주식 주문
 
         토스 API는 KR/US를 단일 엔드포인트로 처리하며 거래소 코드가 불필요하다.
-        (exchange 인자는 KiwoomRESTClient 인터페이스 호환용으로만 유지)
+        (exchange 인자는 기존 인터페이스 호환용으로만 유지)
 
         Args:
             ticker: 티커 심볼 (예: AAPL)

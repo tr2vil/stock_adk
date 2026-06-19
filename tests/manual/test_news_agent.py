@@ -2,13 +2,17 @@
 News Analysis Agent - ADK 로컬 테스트 스크립트
 
 사용법:
-    python test_news_agent.py                    # 기본 테스트 (삼성전자)
-    python test_news_agent.py 현대차              # 한국 종목
-    python test_news_agent.py AAPL               # 미국 종목
-    python test_news_agent.py "SK하이닉스" TSLA   # 복수 종목
+    python tests/manual/test_news_agent.py                    # 기본 테스트 (삼성전자)
+    python tests/manual/test_news_agent.py 현대차              # 한국 종목
+    python tests/manual/test_news_agent.py AAPL               # 미국 종목
+    python tests/manual/test_news_agent.py "SK하이닉스" TSLA   # 복수 종목
 """
+import os
 import sys
 import asyncio
+
+# tests/manual/ 에서 실행해도 프로젝트 루트 패키지를 import 할 수 있도록
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from dotenv import load_dotenv
 
@@ -18,7 +22,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from agents.news_analysis.agent import root_agent
+from sub_agents.news_agent.agent import root_agent
 
 
 async def test_agent(query: str):
@@ -60,7 +64,7 @@ async def test_agent(query: str):
 
 async def test_tool_directly():
     """도구 함수 직접 테스트 (에이전트 없이)"""
-    from agents.news_analysis.tools import (
+    from sub_agents.news_agent.tools import (
         fetch_korean_stock_news,
         fetch_us_stock_news,
     )

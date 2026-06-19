@@ -1,7 +1,7 @@
 # Multi-Agent Stock Trading System — Technical Specification
 
 > **목적**: Google ADK + A2A Protocol 기반 멀티에이전트 자동매매 시스템 구현
-> **기술 스택**: Python 3.13+, Google ADK v1.0+, A2A Protocol, 키움 REST API, Gemini 2.5
+> **기술 스택**: Python 3.13+, Google ADK v1.0+, A2A Protocol, 토스증권 Open API, Gemini 2.5
 
 ---
 
@@ -49,7 +49,7 @@ trading-system/
 │       └── Dockerfile
 ├── execution/
 │   ├── __init__.py
-│   ├── kiwoom_rest.py        # 키움 REST API 클라이언트
+│   ├── toss_rest.py          # 토스증권 REST API 클라이언트
 │   ├── order_manager.py      # 주문 상태 관리 & 체결 추적
 │   └── websocket_client.py   # 실시간 시세 WebSocket
 ├── shared/
@@ -359,7 +359,7 @@ def analyze_technical(ticker: str, market: str = "US") -> dict:
     구현 사항:
     1. 데이터 소스:
        - 미국: yfinance (1년 일봉 + 최근 1개월 시간봉)
-       - 한국: pykrx 또는 키움 REST API 시세 조회
+       - 한국: pykrx 또는 토스증권 Open API 시세 조회
     2. 기술적 지표:
        - 이동평균선: SMA(20,50,200), EMA(12,26)
        - 오실레이터: RSI(14), Stochastic(14,3,3)
@@ -714,147 +714,40 @@ def make_decision(
 
 ---
 
-## 5. 키움 REST API 연동
+## 5. 토스증권 Open API 연동
 
 ### 5.1 REST API 클라이언트
 
-> **참고**: 키움 REST API는 2025년 3월 출시. OS 제약 없이 HTTP 기반으로 동작합니다.
-> 기존 OpenAPI+(OCX)와 달리 Windows, Mac, Linux 모두 지원.
+> **참고**: 토스증권 Open API는 OAuth 2.0(client_credentials, form-urlencoded) 기반 HTTP API입니다.
+> Base URL `https://openapi.tossinvest.com`. KR/US 주문을 단일 엔드포인트(`/api/v1/orders`)로
+> 통합 처리하며 TR_ID 개념이 없고, 모든 숫자 필드는 문자열입니다. 실시간 시세(WebSocket)는
+> 미지원(REST only)이라 시세는 폴링으로 조회합니다. 전체 구현은 `execution/toss_rest.py` 참조.
 
 ```python
-# execution/kiwoom_rest.py
-import requests
-import time
+# execution/toss_rest.py (요약)
 from shared.config import settings
-from shared.models import TradeDecision, Market
 
-class KiwoomRESTClient:
-    """키움 REST API 클라이언트"""
-    
-    BASE_URL = "https://openapi.koreainvestment.com:9443"
-    # 주의: 키움증권 REST API의 실제 base URL은 공식 문서에서 확인 필요
-    # 모의투자와 실전투자의 URL이 다를 수 있음
-    
+class TossRESTClient:
+    """토스증권 Open API 클라이언트"""
+
+    BASE_URL = "https://openapi.tossinvest.com"
+
     def __init__(self):
-        self.app_key = settings.KIWOOM_APP_KEY
-        self.app_secret = settings.KIWOOM_APP_SECRET
-        self.account_no = settings.KIWOOM_ACCOUNT_NO
-        self.token = None
-        self.token_expires_at = 0
-    
-    def _ensure_token(self):
-        """OAuth 토큰 발급/갱신"""
-        if self.token and time.time() < self.token_expires_at:
-            return
-        
-        resp = requests.post(
-            f"{self.BASE_URL}/oauth2/tokenP",
-            json={
-                "grant_type": "client_credentials",
-                "appkey": self.app_key,
-                "appsecret": self.app_secret,
-            }
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        self.token = data["access_token"]
-        self.token_expires_at = time.time() + data.get("expires_in", 86400) - 60
-    
-    def _headers(self, tr_id: str) -> dict:
-        """공통 헤더 생성"""
-        self._ensure_token()
-        return {
-            "content-type": "application/json; charset=utf-8",
-            "authorization": f"Bearer {self.token}",
-            "appkey": self.app_key,
-            "appsecret": self.app_secret,
-            "tr_id": tr_id,
-        }
-    
-    # ── 국내 주식 ──
-    
-    def order_kr_stock(self, ticker: str, qty: int, price: int,
-                        order_type: str = "BUY") -> dict:
-        """국내 주식 주문 (지정가)"""
-        tr_id = "TTTC0802U" if order_type == "BUY" else "TTTC0801U"
-        # 모의투자: "VTTC0802U" (매수), "VTTC0801U" (매도)
-        
-        body = {
-            "CANO": self.account_no[:8],
-            "ACNT_PRDT_CD": self.account_no[8:],
-            "PDNO": ticker,
-            "ORD_DVSN": "00",       # 00: 지정가, 01: 시장가
-            "ORD_QTY": str(qty),
-            "ORD_UNPR": str(price),
-        }
-        
-        resp = requests.post(
-            f"{self.BASE_URL}/uapi/domestic-stock/v1/trading/order-cash",
-            headers=self._headers(tr_id),
-            json=body,
-        )
-        return resp.json()
-    
-    # ── 해외(미국) 주식 ──
-    
-    def order_us_stock(self, ticker: str, qty: int, price: float,
-                        order_type: str = "BUY", exchange: str = "NASD") -> dict:
-        """미국 주식 주문"""
-        tr_id = "JTTT1002U" if order_type == "BUY" else "JTTT1006U"
-        # 모의투자: "VTTT1002U" (매수), "VTTT1006U" (매도)
-        
-        body = {
-            "CANO": self.account_no[:8],
-            "ACNT_PRDT_CD": self.account_no[8:],
-            "OVRS_EXCG_CD": exchange,  # NASD, NYSE, AMEX
-            "PDNO": ticker,
-            "ORD_DVSN": "00",
-            "ORD_QTY": str(qty),
-            "OVRS_ORD_UNPR": str(price),
-        }
-        
-        resp = requests.post(
-            f"{self.BASE_URL}/uapi/overseas-stock/v1/trading/order",
-            headers=self._headers(tr_id),
-            json=body,
-        )
-        return resp.json()
-    
+        self.client_id = settings.TOSS_API_KEY         # client_id (tsck_live_...)
+        self.client_secret = settings.TOSS_SECRET_KEY  # client_secret (tssk_live_...)
+        self._account_seq = settings.TOSS_ACCOUNT_SEQ or None  # 비우면 /api/v1/accounts 자동 조회
+
+    def _ensure_token(self): ...   # OAuth client_credentials(form-urlencoded), 만료 60초 전 갱신
+
+    # ── 주문 (KR/US 단일 엔드포인트, 거래소 코드 불필요) ──
+    def order_kr_stock(self, ticker, qty, price, order_type="BUY") -> dict: ...
+    def order_us_stock(self, ticker, qty, price, order_type="BUY") -> dict: ...
+
     # ── 조회 ──
-    
-    def get_balance(self) -> dict:
-        """계좌 잔고 조회"""
-        params = {
-            "CANO": self.account_no[:8],
-            "ACNT_PRDT_CD": self.account_no[8:],
-            "AFHR_FLPR_YN": "N",
-            "OFL_YN": "",
-            "INQR_DVSN": "02",
-            "UNPR_DVSN": "01",
-            "FUND_STTL_ICLD_YN": "N",
-            "FNCG_AMT_AUTO_RDPT_YN": "N",
-            "PRCS_DVSN": "01",
-        }
-        
-        resp = requests.get(
-            f"{self.BASE_URL}/uapi/domestic-stock/v1/trading/inquire-balance",
-            headers=self._headers("TTTC8434R"),
-            params=params,
-        )
-        return resp.json()
-    
-    def get_current_price_kr(self, ticker: str) -> dict:
-        """국내 주식 현재가 조회"""
-        params = {
-            "FID_COND_MRKT_DIV_CODE": "J",
-            "FID_INPUT_ISCD": ticker,
-        }
-        resp = requests.get(
-            f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price",
-            headers=self._headers("FHKST01010100"),
-            params=params,
-        )
-        return resp.json()
+    def get_balance(self) -> dict: ...                 # 계좌 잔고/보유 종목
+    def get_current_price_kr(self, ticker) -> dict: ...
+    def get_prices(self, symbols) -> dict: ...         # 복수 종목 현재가(워처용)
+    def get_candles(self, *args) -> dict: ...          # 일/분봉
 ```
 
 ### 5.2 주문 관리자
@@ -862,9 +755,8 @@ class KiwoomRESTClient:
 ```python
 # execution/order_manager.py
 from shared.models import TradeDecision
-from execution.kiwoom_rest import KiwoomRESTClient
+from execution.toss_rest import TossRESTClient
 from shared.database import save_trade_log
-from monitoring.alerting import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
@@ -873,7 +765,7 @@ class OrderManager:
     """매매 의사결정을 실제 주문으로 변환하고 관리합니다."""
     
     def __init__(self, dry_run: bool = True):
-        self.client = KiwoomRESTClient()
+        self.client = TossRESTClient()
         self.dry_run = dry_run  # True면 주문 미실행 (로그만)
         self.daily_trade_count = 0
         self.max_daily_trades = 10
@@ -944,11 +836,10 @@ class Settings(BaseSettings):
     # Gemini
     GEMINI_API_KEY: str
     
-    # 키움 REST API
-    KIWOOM_APP_KEY: str
-    KIWOOM_APP_SECRET: str
-    KIWOOM_ACCOUNT_NO: str
-    KIWOOM_IS_MOCK: bool = True  # 모의투자 여부
+    # 토스증권 Open API
+    TOSS_API_KEY: str = ""        # client_id (tsck_live_...)
+    TOSS_SECRET_KEY: str = ""     # client_secret (tssk_live_...)
+    TOSS_ACCOUNT_SEQ: str = ""    # 계좌 시퀀스(비우면 /api/v1/accounts 자동 조회)
     
     # Sub-Agent 호스트 (Docker Compose 서비스명)
     NEWS_AGENT_HOST: str = "news-agent"
@@ -986,10 +877,9 @@ settings = Settings()
 ```
 # .env.example
 GEMINI_API_KEY=your_gemini_api_key
-KIWOOM_APP_KEY=your_kiwoom_app_key
-KIWOOM_APP_SECRET=your_kiwoom_app_secret
-KIWOOM_ACCOUNT_NO=your_account_number
-KIWOOM_IS_MOCK=true
+TOSS_API_KEY=your_toss_client_id
+TOSS_SECRET_KEY=your_toss_client_secret
+TOSS_ACCOUNT_SEQ=
 DATABASE_URL=postgresql://trading:password@localhost:5432/trading
 REDIS_URL=redis://localhost:6379/0
 TELEGRAM_BOT_TOKEN=
@@ -1091,7 +981,7 @@ volumes:
 | 5 | Expert Signal Agent 구현 | 3일 |
 | 6 | Risk Manager Agent 구현 | 2일 |
 | 7 | Orchestrator Agent + Decision Engine | 3일 |
-| 8 | 키움 REST API 연동 (모의투자) | 2일 |
+| 8 | 토스증권 Open API 연동 | 2일 |
 | 9 | Docker Compose 통합 + 전체 E2E 테스트 | 2일 |
 | 10 | 모니터링 대시보드 + 알림 | 2일 |
 | 11 | 모의투자 실전 테스트 (2주 이상 권장) | 14일+ |
@@ -1164,9 +1054,9 @@ dev = [
 
 ## 10. 중요 참고사항
 
-1. **키움 REST API**: 2025년 3월 출시. 기존 OCX(OpenAPI+)와 별도 서비스. REST API 홈페이지에서 별도 신청 필요. 공식 문서에서 최신 엔드포인트/파라미터 반드시 확인.
+1. **토스증권 Open API**: OAuth 2.0(client_credentials) 기반 HTTP API. 개발자 포털(developers.tossinvest.com)에서 앱 등록 후 client_id/secret 발급. 단일 토큰·IP 허용목록 등 제약은 공식 문서에서 확인.
 
-2. **API 호출 제한**: 키움 REST API는 초당 요청 수 제한이 있음. Rate limiter 구현 필수.
+2. **API 호출 제한**: 토스 Open API도 호출 빈도 제한이 있으므로 재시도/백오프와 폴링 주기 조절 필수.
 
 3. **모의투자 우선**: `DRY_RUN=true`로 시작하고, 모의투자 계좌로 최소 2주 이상 테스트 후 실전 적용.
 

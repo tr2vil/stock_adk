@@ -57,17 +57,15 @@ trading-system/
 │   ├── risk_agent/            # 리스크 관리 에이전트
 │   └── Dockerfile             # 공유 Dockerfile
 ├── execution/                 # 주문 실행 모듈
-│   ├── kiwoom_rest.py         # 키움증권 REST API
+│   ├── toss_rest.py           # 토스증권 REST API
 │   ├── order_manager.py       # 주문 관리자
-│   └── websocket_client.py    # 실시간 시세
+│   └── watcher.py             # 스윙 가격 워처 (5분 폴링)
 ├── shared/                    # 공유 모듈
 │   ├── models.py              # Pydantic 데이터 모델
 │   ├── config.py              # 환경 설정 (pydantic-settings)
 │   ├── database.py            # SQLAlchemy 설정
+│   ├── strategy.py            # 스윙 밴드 전략 상태
 │   └── logger.py              # structlog 로깅
-├── monitoring/                # 모니터링
-│   ├── dashboard.py           # Streamlit 대시보드
-│   └── alerting.py            # Telegram/Slack 알림
 ├── frontend/                  # Frontend (React + Vite + Bootstrap)
 │   ├── src/
 │   │   ├── main.jsx           # 진입점
@@ -80,10 +78,13 @@ trading-system/
 │   └── Dockerfile
 ├── docker/
 │   └── nginx/nginx.conf       # Nginx 리버스 프록시 설정
+├── tests/                     # 자동 테스트 (pytest)
+│   └── manual/                # 수동 점검 CLI 스크립트 (test_agent.py 등)
+├── scripts/                   # 기동/종료/재시작 셸 스크립트
+├── docs/                      # 설계 문서·스펙
 ├── docker-compose.yml         # Docker Compose 설정
 ├── requirements.txt           # Python 의존성
 ├── pyproject.toml             # 프로젝트 메타데이터
-├── test_agent.py              # 에이전트 테스트 스크립트
 ├── .env.example               # 환경변수 예시
 └── CLAUDE.md                  # AI 개발 컨텍스트
 ```
@@ -162,10 +163,10 @@ python -m orchestrator.server                  # :8000
 
 ```bash
 # 테스트 스크립트 사용
-python test_agent.py 8003 "Analyze technical indicators for AAPL"
+python tests/manual/test_agent.py 8003 "Analyze technical indicators for AAPL"
 
 # 디버그 모드
-python test_agent.py 8003 --debug "Analyze technical indicators for AAPL"
+python tests/manual/test_agent.py 8003 --debug "Analyze technical indicators for AAPL"
 ```
 
 ## Orchestrator 종합 분석
@@ -298,36 +299,36 @@ pages/StockAnalysis.jsx    → View:       렌더링 (react-markdown)
 ### News Agent (8001)
 
 ```bash
-python test_agent.py 8001 "Analyze recent news for AAPL"
-python test_agent.py 8001 "삼성전자 최신 뉴스 분석해줘"
+python tests/manual/test_agent.py 8001 "Analyze recent news for AAPL"
+python tests/manual/test_agent.py 8001 "삼성전자 최신 뉴스 분석해줘"
 ```
 
 ### Fundamental Agent (8002)
 
 ```bash
-python test_agent.py 8002 "Analyze financials for TSLA"
-python test_agent.py 8002 "005930 재무제표 분석해줘"
+python tests/manual/test_agent.py 8002 "Analyze financials for TSLA"
+python tests/manual/test_agent.py 8002 "005930 재무제표 분석해줘"
 ```
 
 ### Technical Agent (8003)
 
 ```bash
-python test_agent.py 8003 "Analyze technical indicators for NVDA"
-python test_agent.py 8003 "애플 기술적 분석해줘"
+python tests/manual/test_agent.py 8003 "Analyze technical indicators for NVDA"
+python tests/manual/test_agent.py 8003 "애플 기술적 분석해줘"
 ```
 
 ### Expert Agent (8004)
 
 ```bash
-python test_agent.py 8004 "Get analyst ratings for MSFT"
-python test_agent.py 8004 "테슬라 애널리스트 의견 분석해줘"
+python tests/manual/test_agent.py 8004 "Get analyst ratings for MSFT"
+python tests/manual/test_agent.py 8004 "테슬라 애널리스트 의견 분석해줘"
 ```
 
 ### Risk Agent (8005)
 
 ```bash
-python test_agent.py 8005 "Calculate position size for AAPL with 100000 capital"
-python test_agent.py 8005 "10만달러로 NVDA 포지션 사이징해줘"
+python tests/manual/test_agent.py 8005 "Calculate position size for AAPL with 100000 capital"
+python tests/manual/test_agent.py 8005 "10만달러로 NVDA 포지션 사이징해줘"
 ```
 
 ## Docker 실행

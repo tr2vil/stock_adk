@@ -1,6 +1,6 @@
 """
 Configuration management using pydantic-settings.
-Based on TRADING_SYSTEM_SPEC.md Section 6.
+Based on docs/TRADING_SYSTEM_SPEC.md Section 6.
 """
 from pydantic_settings import BaseSettings
 

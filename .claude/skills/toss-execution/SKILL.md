@@ -34,7 +34,7 @@ for attempt in range(2):
     try: resp = requests.get(...); resp.raise_for_status(); return resp.json()
     except Exception as e: last_error=str(e); time.sleep(0.5)
 ```
-공개 인터페이스(키움 호환): `order_kr_stock`, `order_us_stock`, `get_balance`, `get_current_price_kr`, `get_prices`, `get_candles`. KR/US 주문은 내부 `_create_order`로 위임(토스는 단일 엔드포인트).
+공개 인터페이스: `order_kr_stock`, `order_us_stock`, `get_balance`, `get_current_price_kr`, `get_prices`, `get_candles`. KR/US 주문은 내부 `_create_order`로 위임(토스는 단일 엔드포인트).
 
 ## order_manager 안전 규칙
 - `DRY_RUN`이면 주문 미실행(로그만)
