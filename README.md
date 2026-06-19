@@ -332,20 +332,51 @@ python test_agent.py 8005 "10만달러로 NVDA 포지션 사이징해줘"
 
 ## Docker 실행
 
-### 전체 시스템
+> **중요**: 이 프로젝트는 Rancher Desktop을 사용하므로 모든 `docker` 명령에
+> **`--context rancher-desktop`** 를 붙입니다. (기본 context가 colima라 생략하면 다른 VM을 침)
+> 매번 입력이 번거로우면 한 번만 `docker context use rancher-desktop` 실행 후 생략 가능합니다.
+
+### 시작 / 종료 (자주 쓰는 명령)
+
+```bash
+cd /Users/jmpark02/Documents/3_Repository/stock_adk
+
+# ▶ 시작 (백그라운드 기동)
+docker --context rancher-desktop compose up -d
+
+# ⏹ 종료 (컨테이너·네트워크 제거, Redis 데이터는 볼륨에 보존)
+docker --context rancher-desktop compose down
+
+# 🔄 코드 변경 후 재시작 (이미지에 baked되어 리빌드 필수)
+docker --context rancher-desktop compose build orchestrator frontend
+docker --context rancher-desktop compose up -d orchestrator frontend
+
+# 📋 상태 확인 / 로그
+docker --context rancher-desktop compose ps
+docker --context rancher-desktop compose logs -f orchestrator
+
+# 🧹 데이터까지 초기화 (워치리스트·전략 플랜 삭제 — 주의!)
+docker --context rancher-desktop compose down -v
+```
+
+> 종료 후 다시 시작해도 워치리스트·전략 플랜·밴드 설정은 Redis 볼륨에 남아 복원됩니다.
+> 완전 초기화가 필요할 때만 `down -v` 를 사용하세요.
+
+### 전체 시스템 (빌드 포함)
 
 ```bash
 # 빌드 및 실행 (Backend + Frontend 전체)
-docker compose up --build
+docker --context rancher-desktop compose up --build
 
 # 백그라운드 실행
-docker compose up -d --build
+docker --context rancher-desktop compose up -d --build
 
 # Orchestrator + Sub-Agents만 (depends_on으로 인프라 자동 포함)
-docker compose up --build orchestrator
+docker --context rancher-desktop compose up --build orchestrator
 ```
 
 기동 후 http://localhost:5173 에서 웹 UI에 접속할 수 있습니다.
+(로컬 포트 충돌 회피용 `docker-compose.override.yml` 사용 시 Frontend는 http://localhost:15173)
 
 ### 서비스 URL
 
