@@ -1,0 +1,9 @@
+# 고정 리스크 규칙 (진화 대상 아님). Risk Agent / 검증 로직이 참조.
+single_stock_max_weight: 0.20   # 단일 종목 최대 비중 초과 시 주문 거부
+daily_loss_limit: 0.03          # 일일 손실 한도 초과 시 전체 거래 중단
+hil:
+  new_ticker: true              # 신규 종목 첫 매수 → HiL 승인
+  order_value_krw: 1000000      # 단건 주문 100만원 초과 → HiL 승인
+volatility:
+  atr_spike_multiple: 2.0       # ATR > 평균 × 2 → 주문 사이즈 50% 축소
+  size_reduction: 0.5

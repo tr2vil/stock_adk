@@ -62,7 +62,28 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    # 자가진화 분석 (월-금 16:00 KST, 장 마감 후) — 설계서 5.2
+    scheduler.add_job(
+        _evolution_job,
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=0, timezone="Asia/Seoul"),
+        id="daily_evolution",
+        name="Daily Strategy Evolution (16:00 KST)",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     logger.info("Scheduler jobs configured")
+
+
+async def _evolution_job():
+    """장 마감 후 자가진화 분석 트리거. 제안은 HiL 승인 대기로 들어간다."""
+    from orchestrator.evolution_runner import run_evolution_analysis
+    try:
+        result = await run_evolution_analysis(lookback_days=30, trigger="daily_schedule")
+        logger.info(f"Evolution job done: {result.get('status')}")
+    except Exception as e:  # 잡 예외가 스케줄러를 죽이지 않도록
+        logger.error(f"Evolution job failed: {e}")
 
 
 def start_scheduler():

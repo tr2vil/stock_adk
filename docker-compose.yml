@@ -149,6 +149,29 @@ services:
       - trading_network
     restart: unless-stopped
 
+  evolution-agent:
+    build:
+      context: .
+      dockerfile: ./sub_agents/Dockerfile
+    container_name: trading_evolution_agent
+    environment:
+      - AGENT_MODULE=sub_agents.evolution_agent.server:app
+      - AGENT_PORT=8006
+      - A2A_HOST=evolution-agent
+      - LOG_FORMAT=json
+    env_file:
+      - .env
+    volumes:
+      - ./sub_agents:/app/sub_agents
+      - ./shared:/app/shared
+    ports:
+      - "8006:8006"
+    depends_on:
+      - redis
+    networks:
+      - trading_network
+    restart: unless-stopped
+
   # =============================================
   # Infrastructure
   # =============================================

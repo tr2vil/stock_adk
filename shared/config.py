@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     TECHNICAL_AGENT_MODEL: str = "gemini-2.5-flash"
     EXPERT_AGENT_MODEL: str = "gemini-2.5-flash"
     RISK_AGENT_MODEL: str = "gemini-2.5-flash"
+    EVOLUTION_AGENT_MODEL: str = "gemini-2.5-flash"  # 자가진화 전략 제안
     ORCHESTRATOR_MODEL: str = "gemini-2.5-pro"
 
     # ── Agent Hosts (Docker service names) ──
@@ -38,6 +39,8 @@ class Settings(BaseSettings):
     EXPERT_AGENT_PORT: int = 8004
     RISK_AGENT_HOST: str = "risk-agent"
     RISK_AGENT_PORT: int = 8005
+    EVOLUTION_AGENT_HOST: str = "evolution-agent"
+    EVOLUTION_AGENT_PORT: int = 8006
 
     # ── Toss Securities Open API ──
     TOSS_API_KEY: str = ""        # client_id (tsck_live_...)

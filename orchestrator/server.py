@@ -38,6 +38,8 @@ from .scheduler import (
 from execution.toss_rest import TossRESTClient
 from execution.watcher import market_sessions
 from shared.config import settings
+from . import evolution_runner
+from shared.quant import strategy_store as qstore
 
 _logger = get_logger("orchestrator.server")
 
@@ -598,6 +600,52 @@ async def watcher_stop():
     info = stop_watcher()
     _logger.info("watcher_stopped")
     return {"status": "stopped", "enabled": False, **info}
+
+
+# ── 자가진화 퀀트 전략 (Evolution) ──
+
+@app.get("/api/quant/strategy")
+async def quant_strategy_active():
+    """현재 활성 전략 파라미터 조회."""
+    strategy = await qstore.aget_active_strategy()
+    return {"strategy": strategy.model_dump()}
+
+
+@app.get("/api/quant/strategy/history")
+async def quant_strategy_history(limit: int = 5):
+    """전략 변경 이력(최신순)."""
+    return {"history": await qstore.aget_version_history(limit=limit)}
+
+
+@app.post("/api/quant/strategy/rollback/{version}")
+async def quant_strategy_rollback(version: str):
+    """지정 버전으로 전략 롤백."""
+    restored, msg = await qstore.arollback(version)
+    if not restored:
+        return JSONResponse({"status": "error", "message": msg}, status_code=404)
+    _logger.info("strategy_rollback", version=version)
+    return {"status": "rolled_back", "strategy": restored.model_dump()}
+
+
+@app.post("/api/quant/evolution/run")
+async def quant_evolution_run(lookback_days: int = 30):
+    """진화 분석 1회 수동 실행 (데이터 충분 시 LLM 제안 → 대기/Telegram)."""
+    result = await evolution_runner.run_evolution_analysis(
+        lookback_days=lookback_days, trigger="manual",
+    )
+    return result
+
+
+@app.post("/api/quant/evolution/approve/{pid}")
+async def quant_evolution_approve(pid: str):
+    """대기 중인 진화 제안 승인 → 전략 적용."""
+    return await evolution_runner.approve_proposal(pid, approved_by="user")
+
+
+@app.post("/api/quant/evolution/reject/{pid}")
+async def quant_evolution_reject(pid: str):
+    """대기 중인 진화 제안 거부."""
+    return await evolution_runner.reject_proposal(pid)
 
 
 # Mount ADK A2A server

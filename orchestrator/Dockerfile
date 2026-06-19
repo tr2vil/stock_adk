@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY orchestrator/ /app/orchestrator/
 COPY shared/ /app/shared/
 COPY execution/ /app/execution/
+# evolution_agent in-process 실행(자가진화) + strategy.yaml 시드에 필요
+COPY sub_agents/ /app/sub_agents/
+COPY config/ /app/config/
 
 # Set Python path
 ENV PYTHONPATH=/app
