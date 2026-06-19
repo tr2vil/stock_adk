@@ -226,6 +226,7 @@ if __name__ == "__main__":
 | `GOOGLE_KEY` | 서비스 계정 JSON 문자열 | - |
 | `NEWS_AGENT_MODEL` | 뉴스 에이전트 모델 | gemini-2.5-flash |
 | `ORCHESTRATOR_MODEL` | 오케스트레이터 모델 | gemini-2.5-pro |
+| `STRATEGY_EXTRACT_MODEL` | 스윙 밴드 앵커 추출 모델 | gemini-2.5-flash |
 | `DRY_RUN` | 실제 주문 실행 여부 | true |
 
 ---

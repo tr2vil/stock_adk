@@ -4,12 +4,18 @@ Scheduler - APScheduler 기반 정기 분석 스케줄러
 """
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Scheduler instance
 scheduler = AsyncIOScheduler()
+
+# 워처 잡 ID (수동 토글로 add/remove)
+WATCHER_JOB_ID = "swing_price_watcher"
+WATCHER_INTERVAL_MIN = 5  # 장중 5분 폴링
 
 
 async def analyze_watchlist():
@@ -65,6 +71,57 @@ def start_scheduler():
         setup_scheduler()
         scheduler.start()
         logger.info("Scheduler started")
+
+
+# ── 스윙 가격 워처 (수동 토글) ──
+
+async def _watcher_job():
+    """APScheduler가 5분마다 호출하는 워처 잡 래퍼."""
+    from execution.watcher import run_watcher_tick
+    try:
+        await run_watcher_tick()
+    except Exception as e:  # 잡 예외가 스케줄러를 죽이지 않도록
+        logger.error(f"Watcher tick failed: {e}")
+
+
+def start_watcher() -> dict:
+    """워처 인터벌 잡 등록(수동 시작). 스케줄러가 꺼져 있으면 함께 기동."""
+    if not scheduler.running:
+        scheduler.start()
+        logger.info("Scheduler started (for watcher)")
+    scheduler.add_job(
+        _watcher_job,
+        IntervalTrigger(minutes=WATCHER_INTERVAL_MIN),
+        id=WATCHER_JOB_ID,
+        name="Swing Price Watcher (5min)",
+        replace_existing=True,
+        max_instances=1,         # tick 겹침 방지
+        coalesce=True,
+        next_run_time=datetime.now(),  # 등록 즉시 1회 실행
+    )
+    logger.info("Watcher job started")
+    return _watcher_job_info()
+
+
+def stop_watcher() -> dict:
+    """워처 인터벌 잡 제거(수동 중지)."""
+    if scheduler.get_job(WATCHER_JOB_ID):
+        scheduler.remove_job(WATCHER_JOB_ID)
+        logger.info("Watcher job stopped")
+    return {"running": False, "next_run": None}
+
+
+def _watcher_job_info() -> dict:
+    """워처 잡 등록 여부/다음 실행 시각."""
+    job = scheduler.get_job(WATCHER_JOB_ID) if scheduler.running else None
+    return {
+        "running": job is not None,
+        "next_run": job.next_run_time.isoformat() if job and job.next_run_time else None,
+    }
+
+
+def get_watcher_job_info() -> dict:
+    return _watcher_job_info()
 
 
 def stop_scheduler():

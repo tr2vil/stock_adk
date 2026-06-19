@@ -31,13 +31,22 @@ from google.genai import types
 
 from .agent import root_agent
 from .decision_engine import reload_config as reload_decision_config
-from .scheduler import start_scheduler, stop_scheduler
+from .scheduler import (
+    start_scheduler, stop_scheduler,
+    start_watcher, stop_watcher, get_watcher_job_info,
+)
 from execution.toss_rest import TossRESTClient
+from execution.watcher import market_sessions
+from shared.config import settings
 
 _logger = get_logger("orchestrator.server")
 
 # InMemoryRunner for REST API analysis
 _runner = InMemoryRunner(agent=root_agent, app_name="stock_analysis")
+
+# 밴드 앵커 추출 전용 경량 runner (근거 강화)
+from .extract_agent import extract_agent
+_extract_runner = InMemoryRunner(agent=extract_agent, app_name="band_extract")
 
 # Toss client for holdings/candles (포트폴리오 화면)
 _toss = TossRESTClient()
@@ -436,15 +445,20 @@ async def update_thresholds(body: ThresholdsRequest):
 
 # ── 스윙 밴드 전략 (Phase 1: 토대) ──
 
-async def _run_agent_text(prompt: str) -> str:
-    """Orchestrator agent를 실행해 최종 텍스트를 반환 (analyze/chat과 동일 패턴)."""
+async def _run_agent_text(prompt: str, runner: InMemoryRunner | None = None) -> str:
+    """ADK agent를 실행해 최종 텍스트를 반환 (analyze/chat과 동일 패턴).
+
+    runner 미지정 시 오케스트레이터(_runner) 사용. 추출 등 경량 호출은
+    _extract_runner를 넘긴다.
+    """
+    runner = runner or _runner
     user_id = f"strat_{uuid.uuid4().hex[:8]}"
     msg = types.Content(role="user", parts=[types.Part(text=prompt)])
-    session = await _runner.session_service.create_session(
-        app_name=_runner.app_name, user_id=user_id,
+    session = await runner.session_service.create_session(
+        app_name=runner.app_name, user_id=user_id,
     )
     final = ""
-    async for event in _runner.run_async(
+    async for event in runner.run_async(
         user_id=user_id, session_id=session.id, new_message=msg,
     ):
         if event.is_final_response() and event.content and event.content.parts:
@@ -504,6 +518,20 @@ async def strategy_analyze(body: StrategyAnalyzeRequest):
     plan = strat.build_proposed_plan(
         body.symbol, body.market, body.name or body.symbol, report, current,
     )
+
+    # 근거 강화: 집중 LLM 추출로 앵커 + 산출근거 보강 (실패 시 결정론적 파싱값 유지)
+    try:
+        extract_prompt = (
+            f"종목: {body.name or body.symbol} ({body.symbol}, {body.market})\n"
+            f"현재가: {current}\n\n--- 종합 분석 리포트 ---\n{report}"
+        )
+        extract_text = await _run_agent_text(extract_prompt, runner=_extract_runner)
+        extracted = strat.parse_extracted_anchors(extract_text)
+        plan = strat.apply_extracted_anchors(plan, extracted, current)
+        _logger.info("strategy_extracted", symbol=body.symbol, ok=bool(extracted))
+    except Exception as e:  # 추출 실패가 제안 자체를 막지 않도록
+        _logger.warning("strategy_extract_failed", symbol=body.symbol, error=str(e))
+
     plan["generated_at"] = int(time.time() * 1000)
     await strat.aset_proposed_plan(body.symbol, plan)
     _logger.info("strategy_proposed", symbol=body.symbol, target=plan["target_price"])
@@ -523,8 +551,11 @@ async def strategy_approve(body: ApprovePlanRequest):
         plan["buy_anchor"] = body.buy_anchor
     plan["source"] = "approved"
     plan["approved_at"] = int(time.time() * 1000)
+    # 사다리 materialize (밴드 설정 + 승인된 기대값/적정매수가 기준)
+    config = await strat.aget_band_config(body.symbol)
+    plan["ladder"] = strat.build_ladder(plan, config)
     await strat.aset_active_plan(body.symbol, plan)
-    _logger.info("strategy_approved", symbol=body.symbol)
+    _logger.info("strategy_approved", symbol=body.symbol, ladder_levels=len(plan["ladder"]))
     return {"status": "active", "plan": plan}
 
 
@@ -533,6 +564,40 @@ async def strategy_deactivate(symbol: str):
     """활성 플랜 비활성화."""
     await strat.adelete_active_plan(symbol)
     return {"status": "deleted", "symbol": symbol}
+
+
+# ── 가격 워처 (Phase 2: 수동 토글) ──
+
+@app.get("/api/strategy/watcher/status")
+async def watcher_status():
+    """워처 상태 조회: 잡 실행여부·다음실행·최근 tick 요약·DRY_RUN."""
+    sessions = market_sessions()
+    return {
+        "enabled": await strat.aget_watcher_enabled(),
+        "dry_run": settings.DRY_RUN,
+        "markets": sessions,
+        "market_open": any(sessions.values()),
+        **get_watcher_job_info(),
+        "last_tick": await strat.aget_watcher_status(),
+    }
+
+
+@app.post("/api/strategy/watcher/start")
+async def watcher_start():
+    """워처 수동 시작 (5분 인터벌 잡 등록 + enabled=true)."""
+    await strat.aset_watcher_enabled(True)
+    info = start_watcher()
+    _logger.info("watcher_started")
+    return {"status": "started", "enabled": True, **info}
+
+
+@app.post("/api/strategy/watcher/stop")
+async def watcher_stop():
+    """워처 수동 중지 (잡 제거 + enabled=false)."""
+    await strat.aset_watcher_enabled(False)
+    info = stop_watcher()
+    _logger.info("watcher_stopped")
+    return {"status": "stopped", "enabled": False, **info}
 
 
 # Mount ADK A2A server

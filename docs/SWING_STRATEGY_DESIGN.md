@@ -74,6 +74,32 @@ position:{ticker}              : {core_qty, swing_qty, ...} # 토스 holdings에
 - **통합 지점**: `orchestrator/scheduler.py`(APScheduler interval), `execution/order_manager.py`, `shared/strategy.py`.
 - **구현 방식**: 재시작 후 `/dev`로 진행 — `/strategy-builder`(상태머신·워처) + `/toss-execution`(주문) + `/runner`(검증) + `/reviewer`.
 
+## Phase 2 구현 완료 (2026-06)
+- **가격 워처**(`execution/watcher.py`): 5분 인터벌 폴링, LLM 미사용. 종목 market별
+  장시간 게이팅 — KR 09:00~15:30 KST, **US 09:30~16:00 ET(서머타임 자동)**. 각 종목은
+  자기 시장 개장 시에만 평가. 토스 `get_prices`/`get_balance`를 `asyncio.to_thread`로 호출.
+- **사다리 상태머신**(`shared/strategy.py`): `build_ladder`(승인 시 가격 materialize) +
+  `evaluate_ladder`(순수함수). 단별 히스테리시스(`hysteresis_pct`, 기본 3%) + 쿨다운
+  (`cooldown_sec`, 기본 1800s) 재무장. 코어 보호 클램프(보유−누적매도 ≥ core_qty).
+  - 매도 수량 = `floor(swing_qty × fraction)` (보유 기반). 매수 수량 = `floor(buy_base_qty × fraction)`.
+  - **신규 진입(보유 0)**: swing_qty=0이라 매수 불가 → 밴드설정 `notional_swing_qty`(기본 0,
+    0이면 신규 매수 안 함)를 buy_base로 사용해 부트스트랩.
+- **주문**: `order_manager.place_limit(symbol, market, side, qty, price)` — DRY_RUN·일일한도·
+  수량검증·지정가(LIMIT) 고정. 워처는 KST 날짜 경계에서 일일 카운트 리셋.
+- **수동 토글**: `POST /api/strategy/watcher/start|stop`, `GET /api/strategy/watcher/status`
+  (`markets:{KR,US}`, `running`, `next_run`, `last_tick`). APScheduler IntervalTrigger,
+  `max_instances=1`/`coalesce`, 등록 즉시 1회 실행.
+- **근거 강화**(`orchestrator/extract_agent.py`): 5-에이전트 리포트 → 경량 단발 LLM이
+  기대값/적정매수가 + **산출근거(target_basis/buy_basis)** + 확신도를 구조화 JSON 추출.
+  적정매수가를 '손절가' 대신 지지선/적정가 하단에서 도출. 실패 시 결정론적 파싱값 fallback.
+  모델: `STRATEGY_EXTRACT_MODEL`(기본 gemini-2.5-flash).
+- **Redis 키 추가**: `strategy:watcher:enabled`, `strategy:watcher:status`.
+  활성 플랜에 `ladder`(상태 저장), 제안 플랜에 `target_basis`/`buy_basis` 추가.
+- **프론트**(`Strategy.jsx`): 워처 제어 패널(토글·KR/US 개장·DRY_RUN·다음실행·최근tick),
+  사다리 상태 뷰, 산출근거 표시, 시장별 통화(₩/$) 표시, 삭제 버튼 헤더 정리,
+  밴드설정에 신규진입 수량 입력.
+- **테스트**: `tests/test_ladder.py` 10개(상태머신·코어보호·재무장·부트스트랩·KR/US 장시간·추출검증).
+
 ## 이미 구현된 것 (재사용)
 - **프롬프트 Redis + UI 편집**: `Settings.jsx` + `/api/prompts` (GET/PUT) — 6개 에이전트 프롬프트
   확인/수정 + 가중치/임계값 편집 **완성됨**. 추가 작업 불필요.

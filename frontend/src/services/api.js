@@ -48,6 +48,16 @@ export const strategyApprove = (symbol, target_price, buy_anchor) =>
 export const strategyDeactivate = (symbol) =>
     api.delete(`/api/strategy/plans/${symbol}`).then(res => res.data);
 
+// 가격 워처 (Phase 2: 수동 토글)
+export const getWatcherStatus = () =>
+    api.get('/api/strategy/watcher/status').then(res => res.data);
+
+export const startWatcher = () =>
+    api.post('/api/strategy/watcher/start').then(res => res.data);
+
+export const stopWatcher = () =>
+    api.post('/api/strategy/watcher/stop').then(res => res.data);
+
 // ── Prompt Management ──
 
 export const getPrompts = () =>
