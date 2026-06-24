@@ -75,7 +75,19 @@ async def lifespan(app: FastAPI):
             await stack.enter_async_context(
                 sub_app.router.lifespan_context(sub_app)
             )
-        # start_scheduler()  # Uncomment to enable scheduled analysis
+        # 스케줄러 시작 (진화·일일 리포트 잡 등록)
+        start_scheduler()
+
+        # 컨테이너 재시작 후 워처 자동 재개
+        # Redis에 enabled=true 플래그가 있으면 이전 상태를 복구한다
+        try:
+            _watcher_was_enabled = await strat.aget_watcher_enabled()
+            if _watcher_was_enabled:
+                start_watcher()
+                _logger.info("watcher_auto_resumed", reason="redis_flag_was_enabled")
+        except Exception as _e:
+            _logger.warning("watcher_auto_resume_failed", error=str(_e))
+
         yield
         # Shutdown
         stop_scheduler()
@@ -646,6 +658,228 @@ async def quant_evolution_approve(pid: str):
 async def quant_evolution_reject(pid: str):
     """대기 중인 진화 제안 거부."""
     return await evolution_runner.reject_proposal(pid)
+
+
+# ── 디버그: 강제 BUY 테스트 (DRY_RUN 전용) ──
+
+@app.post("/api/debug/test-buy/{symbol}")
+async def debug_test_buy(symbol: str):
+    """DRY_RUN 상태에서 강제 매수 1회 실행 — 메커니즘 검증용.
+
+    실제 주문 없이 OrderManager → trade_log → 신호 상태까지
+    BUY 전체 흐름을 한 번 실행합니다.
+    """
+    import asyncio, time
+    from shared.config import settings as cfg
+    if not cfg.DRY_RUN:
+        raise HTTPException(status_code=403, detail="DRY_RUN=true일 때만 사용 가능합니다")
+
+    from execution.toss_rest import TossRESTClient
+    from execution.order_manager import OrderManager
+    from shared.quant import strategy_store as qs
+    from shared.quant.signal_state import aput_state
+    from shared.quant.trade_log import arecord_trade
+    from execution.watcher import _parse_candles
+
+    toss = TossRESTClient()
+    om = OrderManager()
+
+    # 현재가 조회 (1m 봉 마지막 종가)
+    candle_resp = await asyncio.to_thread(toss.get_candles, symbol.upper(), "1m", 5)
+    candles = _parse_candles(candle_resp)
+    if not candles:
+        raise HTTPException(status_code=502, detail=f"{symbol} 캔들 조회 실패")
+
+    current_price = candles[-1]["closePrice"]
+    watchlist = await strat.aget_watchlist()
+    watch_item = next((w for w in watchlist if w["symbol"] == symbol.upper()), None)
+    budget_usd = float(watch_item["budget_usd"]) if watch_item else 100.0
+    entry_qty = max(1, int(budget_usd / current_price))
+
+    # DRY_RUN 주문
+    order_result = om.place_limit(symbol.upper(), "US", "BUY", entry_qty, current_price)
+
+    # 신호 상태 저장 (M1_OPEN_FIRST)
+    strategy = await qs.aget_active_strategy()
+    sl = round(current_price * (1 - 0.05), 2)
+    target = round(current_price + (current_price - sl) * 2, 2)
+    new_state = {
+        "state": "M1_OPEN_FIRST", "method": 1,
+        "entry_price": current_price, "stop_loss": sl,
+        "target1": target, "target_full": target, "prev_rsi": None,
+    }
+    await aput_state(symbol.upper(), new_state)
+
+    # trade_log 기록
+    now_ms = int(time.time() * 1000)
+    await arecord_trade({
+        "ts": now_ms, "ticker": symbol.upper(), "signal": "BUY",
+        "rsi": None, "sentiment": 0.0, "confidence": 1.0,
+        "strategy_version": strategy.version,
+        "side": "buy", "quantity": entry_qty, "price": current_price,
+        "entry_price": current_price, "return_rate": None,
+        "reasoning": "[DEBUG] 강제 매수 테스트",
+    })
+
+    _logger.info("debug_test_buy", symbol=symbol, qty=entry_qty, price=current_price)
+    return {
+        "symbol": symbol.upper(),
+        "action": "BUY",
+        "order_status": order_result.get("status"),
+        "qty": entry_qty,
+        "price": current_price,
+        "stop_loss": sl,
+        "target1": target,
+        "budget_usd": budget_usd,
+        "signal_state": "M1_OPEN_FIRST",
+        "note": "DRY_RUN — 실제 주문 없음, 신호 상태 저장됨",
+    }
+
+
+# ── Telegram 테스트 ──
+
+@app.post("/api/telegram/test")
+async def telegram_test():
+    """Telegram 연결 테스트 메시지 발송."""
+    from shared import notifications
+    if not notifications.telegram_enabled():
+        raise HTTPException(status_code=400, detail="TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID가 설정되지 않았습니다")
+    result = await notifications.send_message(
+        "✅ Stock ADK 연결 테스트\n\n"
+        "MACD+RSI 자동매매 시스템이 정상 연결됐습니다.\n"
+        "US 장 마감(16:30 ET) 후 일일 결산 리포트가 이 채널로 발송됩니다."
+    )
+    return {"status": result.get("status"), "telegram_enabled": True}
+
+
+# ── MACD+RSI 유니버스 스캐너 ──
+
+class ScreenerRequest(BaseModel):
+    symbols: list[str]
+    filters: dict | None = None
+
+
+@app.post("/api/screener/check")
+async def screener_check(body: ScreenerRequest):
+    """US 종목 유니버스 적합성 판정 (시가총액·Float·상대거래량·갭).
+
+    Body: {"symbols": ["CRWD", "AAPL", ...], "filters": {...} (optional)}
+    """
+    import asyncio
+    from shared.screener import check_stocks
+    if not body.symbols:
+        raise HTTPException(status_code=400, detail="symbols 필드가 비어 있습니다")
+    if len(body.symbols) > 20:
+        raise HTTPException(status_code=400, detail="한 번에 최대 20개까지 조회 가능합니다")
+    results = await asyncio.to_thread(check_stocks, body.symbols, body.filters)
+    return {"results": results, "count": len(results)}
+
+
+@app.get("/api/portfolio/strategy-fit")
+async def portfolio_strategy_fit():
+    """현재 Toss 보유종목의 MACD+RSI 전략 적합성 판정.
+
+    Toss holdings → 각 종목 yfinance 조회 → 유니버스 필터 적용.
+    """
+    import asyncio
+    from shared.screener import check_stocks
+
+    holdings_resp = await asyncio.to_thread(_toss.get_balance)
+    result = holdings_resp.get("result", holdings_resp) if isinstance(holdings_resp, dict) else {}
+    items = result.get("items", []) if isinstance(result, dict) else []
+
+    if not items:
+        return {"holdings": [], "summary": {"fit": 0, "border": 0, "reject": 0}}
+
+    symbols = []
+    holding_map = {}
+    for it in items:
+        sym = it.get("symbol", "")
+        if sym:
+            symbols.append(sym)
+            holding_map[sym] = it
+
+    screen_results = await asyncio.to_thread(check_stocks, symbols)
+
+    enriched = []
+    for r in screen_results:
+        sym = r["symbol"]
+        h = holding_map.get(sym, {})
+        r["holding_value"] = h.get("marketValue") or h.get("purchaseAmount")
+        r["quantity"] = h.get("quantity")
+        enriched.append(r)
+
+    summary = {"fit": 0, "border": 0, "reject": 0}
+    for r in enriched:
+        summary[r.get("fit", "reject")] = summary.get(r.get("fit", "reject"), 0) + 1
+
+    return {"holdings": enriched, "summary": summary}
+
+
+@app.get("/api/signal/states")
+async def signal_states_all():
+    """워치리스트 전 종목 신호 상태 일괄 조회."""
+    from shared.quant.signal_state import aget_all_states
+    watchlist = await strat.aget_watchlist()
+    all_states = await aget_all_states()
+    strategy = await qstore.aget_active_strategy()
+
+    result = []
+    for w in watchlist:
+        sym = w.get("symbol", "")
+        st = all_states.get(sym, {"state": "IDLE"})
+        result.append({
+            "symbol": sym,
+            "market": w.get("market", "US"),
+            "name": w.get("name", sym),
+            "budget_usd": w.get("budget_usd", 0),
+            "signal_state": st.get("state", "IDLE"),
+            "entry_price": st.get("entry_price"),
+            "stop_loss": st.get("stop_loss"),
+            "target1": st.get("target1"),
+            "target_full": st.get("target_full"),
+            "method": st.get("method"),
+            "prev_rsi": st.get("prev_rsi"),
+        })
+
+    return {
+        "signals": result,
+        "strategy_version": strategy.version,
+        "strategy": {
+            "macd": strategy.macd.model_dump(),
+            "rsi": strategy.rsi.model_dump(),
+            "hma_filter": strategy.hma_filter.model_dump(),
+        },
+    }
+
+
+# ── 트레이딩 예산 설정 ──
+
+class BudgetRequest(BaseModel):
+    budget_usd: float
+
+
+@app.get("/api/settings/trading-budget")
+async def get_trading_budget():
+    """총 트레이딩 예산 조회."""
+    total = await strat.aget_trading_budget()
+    watchlist = await strat.aget_watchlist()
+    allocated = await strat.aget_allocated_budget(watchlist)
+    return {
+        "total_budget_usd": total,
+        "allocated_usd": allocated,
+        "available_usd": max(0.0, total - allocated),
+    }
+
+
+@app.put("/api/settings/trading-budget")
+async def set_trading_budget(body: BudgetRequest):
+    """총 트레이딩 예산 설정."""
+    if body.budget_usd < 0:
+        raise HTTPException(status_code=400, detail="예산은 0 이상이어야 합니다")
+    await strat.aset_trading_budget(body.budget_usd)
+    _logger.info("trading_budget_set", budget_usd=body.budget_usd)
+    return {"status": "ok", "budget_usd": body.budget_usd}
 
 
 # Mount ADK A2A server

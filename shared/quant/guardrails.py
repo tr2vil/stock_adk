@@ -1,34 +1,45 @@
 """진화 안전장치 — LLM 제안 검증·적용·버전 관리 (순수 함수, 결정론적).
 
-LLM(Evolution Agent)이 비합리적/위험한 파라미터를 제안해도 시스템을 보호한다.
-설계서 5.4 가드레일을 구현하되, 다음을 강제한다.
+MACD+RSI 전략 v2 대응. 허용목록 방식으로 Evolution Agent가 변경 가능한
+파라미터와 그 범위를 엄격히 제한한다.
 
-- 허용 목록(allow-list): EVOLUTION_GUARDRAILS 에 명시된 파라미터만 변경 가능.
-  position.* 등 미명시 파라미터 변경 제안은 무조건 거부 → 리스크 안전구역 보호.
+- 허용 목록(allow-list): EVOLUTION_GUARDRAILS에 명시된 파라미터만 변경 가능.
+  position.* 등 미명시 파라미터는 무조건 거부.
 - 범위 검증: 각 제안값이 [low, high] 이내여야 한다.
-- 타입 검증: ma_period 는 정수.
-- 교차 검증: 적용 후 rsi_buy_threshold < rsi_sell_threshold 유지.
+- 타입 검증: INT_PARAMS는 정수.
+- 교차 검증: macd.fast < macd.slow, rsi.buy_low < rsi.buy_high.
 """
 from __future__ import annotations
 
 import copy
 
-from .schema import StrategyConfig, EvolutionProposal, ProposedChange
+from .schema import StrategyConfig, EvolutionProposal, ProposedChange  # noqa: F401
 
 # 파라미터별 허용 범위 (이 목록에 없으면 변경 불가)
-# 설계서 5.4 명시값 + (확장) ma_period / confidence_min 범위.
 EVOLUTION_GUARDRAILS: dict[str, tuple[float, float]] = {
-    "momentum.rsi_buy_threshold": (15, 40),
-    "momentum.rsi_sell_threshold": (60, 85),
-    "momentum.ma_period": (5, 60),            # 확장: 설계서 미명시 → 합리적 범위 지정
-    "momentum.sentiment_min": (-0.5, 0.3),
-    "stop_loss.rate": (0.03, 0.15),
-    "news_defense.sentiment_threshold": (-0.9, -0.5),
-    "news_defense.confidence_min": (0.5, 0.95),  # 확장
+    # RSI 진입/청산 임계값
+    "rsi.buy_low": (40.0, 55.0),
+    "rsi.buy_high": (65.0, 80.0),
+    "rsi.pullback_zone_high": (50.0, 62.0),
+    # MACD 기간
+    "macd.fast": (8, 20),
+    "macd.slow": (20, 35),
+    # 거래량 필터
+    "volume_filter.multiplier": (1.0, 3.0),
+    "volume_filter.lookback": (10, 30),
+    # HMA 기간 (구조 파라미터인 timeframe/enabled는 변경 불가)
+    "hma_filter.period": (20, 200),
+    # 손절 룩백
+    "stop_loss.lookback_candles": (5, 20),
 }
 
 # 정수여야 하는 파라미터
-INT_PARAMS = {"momentum.ma_period"}
+INT_PARAMS = {
+    "macd.fast", "macd.slow",
+    "hma_filter.period",
+    "stop_loss.lookback_candles",
+    "volume_filter.lookback",
+}
 
 
 def _as_proposal(proposal) -> EvolutionProposal:
@@ -64,7 +75,7 @@ def validate_proposal(proposal) -> tuple[bool, str]:
 
 
 def bump_version(version: str) -> str:
-    """시맨틱 버전 마이너 증가: '1.2.0' → '1.3.0'. 파싱 실패 시 '.N' 부가."""
+    """시맨틱 버전 마이너 증가: '2.0.0' → '2.1.0'."""
     parts = version.split(".")
     try:
         major, minor = int(parts[0]), int(parts[1])
@@ -80,13 +91,13 @@ def apply_proposal(
     approved_by: str = "user",
     now_iso: str = "",
 ) -> tuple[StrategyConfig | None, list[dict], str | None]:
-    """검증 통과 시 제안을 적용한 새 StrategyConfig 를 반환.
+    """검증 통과 시 제안을 적용한 새 StrategyConfig를 반환.
 
     Returns:
         (new_strategy, applied_changes, error)
         - 성공: (StrategyConfig, [{param,current,proposed}, ...], None)
         - 실패: (None, [], "사유")
-    원본 strategy 는 변경하지 않는다.
+    원본 strategy는 변경하지 않는다.
     """
     ok, msg = validate_proposal(proposal)
     if not ok:
@@ -103,11 +114,16 @@ def apply_proposal(
         data[section][key] = value
         applied.append({"param": ch.param, "current": current, "proposed": value})
 
-    # 교차 검증: 적용 후 매수 임계값 < 매도 임계값
-    if data["momentum"]["rsi_buy_threshold"] >= data["momentum"]["rsi_sell_threshold"]:
+    # 교차 검증: macd.fast < macd.slow
+    if data["macd"]["fast"] >= data["macd"]["slow"]:
         return None, [], (
-            f"rsi_buy_threshold({data['momentum']['rsi_buy_threshold']}) must be "
-            f"< rsi_sell_threshold({data['momentum']['rsi_sell_threshold']})"
+            f"macd.fast({data['macd']['fast']}) must be < macd.slow({data['macd']['slow']})"
+        )
+
+    # 교차 검증: rsi.buy_low < rsi.buy_high
+    if data["rsi"]["buy_low"] >= data["rsi"]["buy_high"]:
+        return None, [], (
+            f"rsi.buy_low({data['rsi']['buy_low']}) must be < rsi.buy_high({data['rsi']['buy_high']})"
         )
 
     data["version"] = bump_version(strategy.version)

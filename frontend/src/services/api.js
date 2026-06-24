@@ -58,6 +58,23 @@ export const startWatcher = () =>
 export const stopWatcher = () =>
     api.post('/api/strategy/watcher/stop').then(res => res.data);
 
+// ── MACD+RSI 스캐너 / 신호 / 예산 ──
+
+export const checkScreener = (symbols, filters = null) =>
+    api.post('/api/screener/check', { symbols, filters }).then(res => res.data);
+
+export const getPortfolioStrategyFit = () =>
+    api.get('/api/portfolio/strategy-fit').then(res => res.data);
+
+export const getSignalStates = () =>
+    api.get('/api/signal/states').then(res => res.data);
+
+export const getTradingBudget = () =>
+    api.get('/api/settings/trading-budget').then(res => res.data);
+
+export const setTradingBudget = (budget_usd) =>
+    api.put('/api/settings/trading-budget', { budget_usd }).then(res => res.data);
+
 // ── Prompt Management ──
 
 export const getPrompts = () =>

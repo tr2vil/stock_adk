@@ -45,6 +45,7 @@ _PLAN_PROPOSED = "strategy:plan:proposed:"
 _PLAN_ACTIVE = "strategy:plan:active:"
 _WATCHER_ENABLED = "strategy:watcher:enabled"
 _WATCHER_STATUS = "strategy:watcher:status"
+_TRADING_BUDGET_KEY = "settings:trading_budget_usd"
 
 
 # ── 워치리스트 ──
@@ -57,6 +58,29 @@ async def aget_watchlist() -> list[dict]:
 
 async def aset_watchlist(items: list[dict]) -> None:
     await get_async_redis().set(_WATCHLIST_KEY, json.dumps(items, ensure_ascii=False))
+
+
+# ── 트레이딩 예산 ──
+
+async def aget_trading_budget() -> float:
+    """총 트레이딩 예산(USD) 조회. 미설정이면 0.0."""
+    raw = await get_async_redis().get(_TRADING_BUDGET_KEY)
+    try:
+        return float(raw) if raw else 0.0
+    except (ValueError, TypeError):
+        return 0.0
+
+
+async def aset_trading_budget(budget_usd: float) -> None:
+    """총 트레이딩 예산(USD) 저장."""
+    await get_async_redis().set(_TRADING_BUDGET_KEY, str(max(0.0, budget_usd)))
+
+
+async def aget_allocated_budget(watchlist: list[dict] | None = None) -> float:
+    """워치리스트 종목들에 이미 배분된 예산 합계(USD)."""
+    if watchlist is None:
+        watchlist = await aget_watchlist()
+    return sum(float(w.get("budget_usd", 0)) for w in watchlist)
 
 
 # ── 밴드 설정 ──

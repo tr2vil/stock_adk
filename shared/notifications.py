@@ -66,3 +66,92 @@ async def send_hil_order(order_id: str, summary: str) -> dict:
         summary,
         reply_markup=_approval_keyboard(f"order_approve_{order_id}", f"order_reject_{order_id}"),
     )
+
+
+async def send_daily_report(report_date: str, trades: list[dict], open_positions: list[dict]) -> dict:
+    """US 장 마감 후 일일 매매 결산 리포트 발송.
+
+    Args:
+        report_date: "2026-06-24" 형식 날짜
+        trades:   오늘 체결된 거래 목록 (trade_log 레코드)
+        open_positions: 현재 오픈 포지션 목록 [{symbol, entry_price, current_price, qty, signal_state}]
+    """
+    lines = [f"📊 일일 매매 결과 — {report_date} (US 시장)"]
+
+    # ── 체결 내역 ──
+    if trades:
+        lines.append("")
+        lines.append("── 오늘 거래 내역 ──────────────────")
+        for t in trades:
+            side = t.get("side", "")
+            ticker = t.get("ticker", "")
+            qty = t.get("quantity") or 0
+            price = t.get("price") or 0
+            rr = t.get("return_rate")
+            action = t.get("signal", side.upper())
+
+            if side == "buy":
+                lines.append(f"🟢 {ticker}  매수 {qty}주 @${price:.2f}")
+            else:
+                rr_str = f"  ({rr * 100:+.1f}%)" if rr is not None else ""
+                pnl = (price - (t.get("entry_price") or price)) * qty
+                pnl_str = f"  {pnl:+.2f}" if t.get("entry_price") else ""
+                label = "1차익절" if action == "SELL_HALF" else "전량청산"
+                lines.append(f"🔴 {ticker}  {label} {qty}주 @${price:.2f}{rr_str}{pnl_str}")
+    else:
+        lines.append("")
+        lines.append("── 오늘 거래 없음 ──────────────────")
+
+    # ── 오픈 포지션 ──
+    realized_pnl = 0.0
+    unrealized_pnl = 0.0
+
+    for t in trades:
+        if t.get("side") == "sell" and t.get("entry_price") and t.get("price") and t.get("quantity"):
+            realized_pnl += (t["price"] - t["entry_price"]) * t["quantity"]
+
+    if open_positions:
+        lines.append("")
+        lines.append("── 오픈 포지션 ─────────────────────")
+        for pos in open_positions:
+            sym = pos.get("symbol", "")
+            ep = pos.get("entry_price") or 0
+            cp = pos.get("current_price") or 0
+            qty = pos.get("qty") or 0
+            state = pos.get("signal_state", "")
+            unreal = (cp - ep) * qty if ep and cp and qty else 0
+            unrealized_pnl += unreal
+            sign = "+" if unreal >= 0 else ""
+            lines.append(f"📌 {sym}  {qty}주 | 진입 ${ep:.2f} | 종가 ${cp:.2f} ({sign}${unreal:.2f} 미실현)")
+    else:
+        # 신호 대기 종목
+        pass
+
+    # 신호 대기 (IDLE/QUEUED)
+    waiting = [p for p in open_positions if "IDLE" in p.get("signal_state", "") or "QUEUE" in p.get("signal_state", "")]
+    if waiting:
+        lines.append("")
+        lines.append("── 신호 대기 ───────────────────────")
+        for p in waiting:
+            state_label = {
+                "IDLE": "대기 중",
+                "M1_QUEUED_RSI_LOW": "RSI 50 돌파 대기",
+                "M1_QUEUED_RSI_HIGH": "눌림목 대기",
+                "M2_DIVERGENCE": "데드크로스 대기",
+                "M2_COOLDOWN": "골든크로스 재전환 대기",
+            }.get(p.get("signal_state", ""), p.get("signal_state", ""))
+            lines.append(f"⏳ {p.get('symbol')}  {state_label}")
+
+    # ── 요약 ──
+    lines.append("")
+    lines.append("── 요약 ────────────────────────────")
+    r_sign = "+" if realized_pnl >= 0 else ""
+    u_sign = "+" if unrealized_pnl >= 0 else ""
+    total = realized_pnl + unrealized_pnl
+    t_sign = "+" if total >= 0 else ""
+    lines.append(f"실현 손익   {r_sign}${realized_pnl:.2f}")
+    lines.append(f"미실현 손익 {u_sign}${unrealized_pnl:.2f}")
+    lines.append("─────────────────────────────")
+    lines.append(f"총 평가     {t_sign}${total:.2f}")
+
+    return await send_message("\n".join(lines))

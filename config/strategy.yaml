@@ -1,24 +1,39 @@
-# 활성 퀀트 전략 (자가진화 대상)
+# 활성 퀀트 전략 (자가진화 대상) — MACD+RSI 모멘텀 전략 v2
 # 이 파일은 "시드(seed) 기본값"이다. 런타임 활성 전략과 버전 이력은 Redis에 저장되며
 # (shared.quant.strategy_store), Evolution Agent의 승인된 제안으로 갱신된다.
 # position 섹션은 리스크 안전구역으로 진화가 변경할 수 없다(가드레일).
-version: "1.0.0"
-updated_at: "2026-06-19T00:00:00+09:00"
+version: "2.0.0"
+updated_at: "2026-06-23T00:00:00+09:00"
 updated_by: "seed"
 
-momentum:
-  rsi_buy_threshold: 30       # RSI 매수 기준 (진화 대상)
-  rsi_sell_threshold: 70      # RSI 매도 기준 (진화 대상)
-  ma_period: 20               # 이동평균 기간 (진화 대상)
-  sentiment_min: -0.3         # 매수 허용 최소 감성 점수 (진화 대상)
+macd:
+  fast: 12        # 단기 EMA 기간 (진화 대상)
+  slow: 26        # 장기 EMA 기간 (진화 대상)
+  signal: 9       # 시그널 EMA 기간
+
+rsi:
+  period: 14
+  buy_low: 50     # 정상 진입 RSI 하한 — 50≤RSI<buy_high 에서 진입 (진화 대상)
+  buy_high: 70    # 정상 진입 RSI 상한 — 70 이상은 눌림목 대기 큐 (진화 대상)
+  pullback_zone_high: 55  # 눌림목 반등 인정 RSI 상한 (진화 대상)
+
+hma_filter:
+  enabled: true
+  timeframe: "1d"   # 상위 TF: "1d" 일봉 또는 "1h" 1시간봉
+  period: 50        # HMA 기간 (진화 대상)
+
+volume_filter:
+  enabled: true
+  lookback: 20      # 평균 거래량 산출 구간 (진화 대상)
+  multiplier: 1.5   # 현재 거래량 ≥ 평균 × multiplier (진화 대상)
 
 stop_loss:
-  rate: 0.05                  # 손절 비율 (진화 대상, 최소 0.03)
+  lookback_candles: 10  # 손절가 = 최근 N 5분봉 저점 (진화 대상)
 
-news_defense:
-  sentiment_threshold: -0.7   # 매수 금지 감성 임계값 (진화 대상)
-  confidence_min: 0.8         # 뉴스 방어 발동 최소 신뢰도 (진화 대상)
+divergence:
+  enabled: true
+  swing_window: 5   # 스윙 고점 판별 윈도우 (양쪽 각 N캔들)
 
 position:
-  max_single_weight: 0.20     # 단일 종목 최대 비중 (리스크 규칙 — 진화 변경 불가)
-  daily_loss_limit: 0.03      # 일일 손실 한도 (리스크 규칙 — 진화 변경 불가)
+  max_single_weight: 0.20   # 단일 종목 최대 비중 (리스크 규칙 — 진화 변경 불가)
+  daily_loss_limit: 0.03    # 일일 손실 한도 (리스크 규칙 — 진화 변경 불가)

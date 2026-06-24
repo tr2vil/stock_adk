@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     MAX_DAILY_TRADES: int = 10
     DRY_RUN: bool = True                   # True면 주문 미실행
 
+    # ── MACD+RSI 자동매매 예산 ──
+    TRADING_BUDGET_USD: float = 0.0        # 총 트레이딩 예산 (USD). 0이면 미설정
+
     class Config:
         env_file = ".env"
         extra = "ignore"

@@ -178,8 +178,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: trading_redis
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - trading_network
     restart: unless-stopped
@@ -287,5 +290,6 @@ networks:
 
 volumes:
   pgdata:
+  redis_data:
   loki_data:
   grafana_data:

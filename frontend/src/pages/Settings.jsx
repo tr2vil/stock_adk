@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings as SettingsIcon, Save, RotateCcw, CheckCircle, AlertCircle } from 'lucide-react';
-import { getPrompts, updatePrompt, getWeights, updateWeights, updateThresholds } from '../services/api';
+import { Settings as SettingsIcon, Save, RotateCcw, CheckCircle, AlertCircle, DollarSign } from 'lucide-react';
+import { getPrompts, updatePrompt, getWeights, updateWeights, updateThresholds, getTradingBudget, setTradingBudget } from '../services/api';
 import styles from './Settings.module.css';
 
 const AGENTS = [
@@ -64,6 +64,31 @@ const Settings = () => {
     const showToast = useCallback((type, message) => {
         setToast({ type, message });
     }, []);
+
+    // ── 트레이딩 예산 ──
+    const [budgetInput, setBudgetInput] = useState('');
+    const [budgetData, setBudgetData] = useState(null);
+
+    useEffect(() => {
+        getTradingBudget()
+            .then(d => { setBudgetData(d); setBudgetInput(String(d.total_budget_usd || '')); })
+            .catch(() => {});
+    }, []);
+
+    const saveBudget = async () => {
+        const val = parseFloat(budgetInput);
+        if (isNaN(val) || val < 0) { showToast('error', '올바른 금액을 입력하세요'); return; }
+        setSaving(true);
+        try {
+            await setTradingBudget(val);
+            const d = await getTradingBudget();
+            setBudgetData(d);
+            showToast('success', `총 트레이딩 예산이 $${val.toLocaleString()}으로 설정됐습니다`);
+        } catch (e) {
+            showToast('error', e.response?.data?.detail || '예산 저장 실패');
+        }
+        setSaving(false);
+    };
 
     const savePrompt = async () => {
         setSaving(true);
@@ -144,6 +169,47 @@ const Settings = () => {
             <div className={styles.pageHeader}>
                 <SettingsIcon size={24} className="me-2" />
                 <h4 className="mb-0 fw-bold">에이전트 설정</h4>
+            </div>
+
+            {/* 트레이딩 예산 */}
+            <div className="card shadow-sm mb-3">
+                <div className="card-header d-flex align-items-center gap-2">
+                    <DollarSign size={16} />
+                    <span className="fw-semibold">MACD+RSI 자동매매 예산</span>
+                </div>
+                <div className="card-body">
+                    <div className="row g-3 align-items-end">
+                        <div className="col-auto">
+                            <label className="form-label small mb-1">총 트레이딩 예산 (USD)</label>
+                            <div className="input-group" style={{ width: 220 }}>
+                                <span className="input-group-text">$</span>
+                                <input
+                                    type="number"
+                                    className="form-control"
+                                    min="0"
+                                    step="100"
+                                    placeholder="예: 3000"
+                                    value={budgetInput}
+                                    onChange={e => setBudgetInput(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="col-auto">
+                            <button className="btn btn-primary" onClick={saveBudget} disabled={saving}>
+                                <Save size={14} className="me-1" />저장
+                            </button>
+                        </div>
+                        {budgetData && (
+                            <div className="col-auto small text-muted">
+                                배분됨 <strong className="text-danger">${(budgetData.allocated_usd || 0).toFixed(0)}</strong>
+                                &nbsp;·&nbsp; 잔여 <strong className="text-success">${(budgetData.available_usd || 0).toFixed(0)}</strong>
+                            </div>
+                        )}
+                    </div>
+                    <div className="text-muted small mt-2">
+                        종목별 배분은 전략 → 스캐너 탭에서 종목 추가 시 설정합니다.
+                    </div>
+                </div>
             </div>
 
             <div className="row g-3">
